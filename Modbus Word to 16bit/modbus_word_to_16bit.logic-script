@@ -1,0 +1,238 @@
+// =============================================================
+// Map a Modbus word to 16 Bits 
+// 
+// V1.0 02-07-2026
+// Tested on WC 10.0
+// =============================================================
+
+import javax.swing.*
+import javax.swing.table.*
+import java.awt.*
+import java.awt.event.*
+import java.awt.datatransfer.*
+
+// =============================================================
+// TABLE MODEL & CUSTOM RENDERER
+// =============================================================
+
+def columnNames = ["Bit", "Display Name", "Reference Name"]
+def data = (0..15).collect { [it.toString(), "", ""] } as Object[][]
+
+DefaultTableModel model = new DefaultTableModel(data, columnNames as Object[]) {
+    @Override boolean isCellEditable(int row, int col) { return col != 0 }
+}
+
+class EikonCellRenderer extends DefaultTableCellRenderer {
+    @Override
+    Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int col) {
+        Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, col)
+        if (col == 1 && value != null && value.toString().length() > 40) {
+            c.setForeground(Color.RED)
+            c.setFont(c.getFont().deriveFont(Font.BOLD))
+        } else {
+            c.setForeground(isSelected ? Color.WHITE : (col == 0 ? Color.GRAY : Color.BLACK))
+            c.setFont(c.getFont().deriveFont(Font.PLAIN))
+        }
+        return c
+    }
+}
+
+// =============================================================
+// GUI COMPONENTS SETUP
+// =============================================================
+
+JTable table = new JTable(model)
+table.getColumnModel().getColumn(0).setPreferredWidth(40)
+table.getColumnModel().getColumn(1).setPreferredWidth(280)
+table.getColumnModel().getColumn(2).setPreferredWidth(250)
+table.setDefaultRenderer(Object.class, new EikonCellRenderer())
+table.setRowHeight(22)
+table.setCellSelectionEnabled(true)
+
+// Helper for Step 2 RefName Compliance (lowercase, no leading numbers, 40 chars)
+def eikonFormatRef = { str ->
+    if (!str) return ""
+    def s = str.toLowerCase()
+               .replace(' / ', '_').replace(' - ', '_')
+               .replace(' ', '_').replace('/', '_')
+               .replace('-', '_').replace("(", '')
+               .replace(")", '').replace('"', '')
+    s = s.replaceAll('^\\d+', '')
+    if (s.length() > 40) s = s.substring(0, 40)
+    return s
+}
+
+// Auto-generate RefName in table when Display Name is updated
+model.addTableModelListener({ e ->
+    if (e.getType() == javax.swing.event.TableModelEvent.UPDATE && e.getColumn() == 1) {
+        int row = e.getFirstRow()
+        String displayName = model.getValueAt(row, 1).toString()
+        if (!displayName.isEmpty()) {
+            SwingUtilities.invokeLater({ 
+                model.setValueAt(eikonFormatRef(displayName), row, 2) 
+            })
+        }
+    }
+})
+
+// Paste Logic for Table
+table.addKeyListener(new KeyAdapter() {
+    @Override
+    void keyPressed(KeyEvent e) {
+        if ((e.getModifiersEx() & Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()) != 0 && e.getKeyCode() == KeyEvent.VK_V) {
+            int startRow = table.getSelectedRow()
+            int startCol = table.getSelectedColumn()
+            if (startCol == 0) startCol = 1 
+            try {
+                String clipboardString = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null).getTransferData(DataFlavor.stringFlavor)
+                String[] lines = clipboardString.split("\n")
+                for (int i = 0; i < lines.length && (startRow + i) < 16; i++) {
+                    String value = lines[i].replace("\r", "").trim()
+                    model.setValueAt(value, startRow + i, startCol)
+                }
+                e.consume() 
+            } catch (Exception ex) { println "Paste failed: " + ex.message }
+        }
+    }
+})
+
+JTextField oldRegField = new JTextField("898989898", 10)
+JTextField newRegField = new JTextField("", 10)
+JTextArea statusLabel = new JTextArea("Ready\nPaste names into 'Display Name' then hit OK.")
+statusLabel.setEditable(true)
+statusLabel.setBackground(new Color(245, 245, 245))
+
+JPanel regPanel = new JPanel(new GridBagLayout())
+GridBagConstraints gbc = new GridBagConstraints()
+gbc.insets = new Insets(5, 10, 5, 10)
+gbc.gridx = 0; gbc.gridy = 0; regPanel.add(new JLabel("Old Reg#"), gbc)
+gbc.gridx = 1; regPanel.add(oldRegField, gbc)
+gbc.gridx = 2; gbc.gridy = 0; regPanel.add(new JLabel("New Reg #"), gbc)
+gbc.gridx = 3; regPanel.add(newRegField, gbc)
+
+JButton okButton = new JButton("OK")
+JButton clearButton = new JButton("Clear Table")
+JButton cancelButton = new JButton("Close")
+JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER))
+buttonPanel.add(okButton)
+buttonPanel.add(clearButton)
+buttonPanel.add(cancelButton)
+
+JPanel mainPanel = new JPanel(new BorderLayout(10, 10))
+mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10))
+mainPanel.add(new JScrollPane(table), BorderLayout.CENTER)
+
+JPanel bottomPanel = new JPanel()
+bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS))
+bottomPanel.add(regPanel)
+bottomPanel.add(Box.createVerticalStrut(10))
+bottomPanel.add(new JScrollPane(statusLabel) {{ setPreferredSize(new Dimension(500, 80)) }})
+bottomPanel.add(buttonPanel)
+mainPanel.add(bottomPanel, BorderLayout.SOUTH)
+
+JFrame frame = new JFrame("Modbus Word to 16 bit Mapping")
+frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE)
+frame.setContentPane(mainPanel)
+frame.setSize(650, 700)
+frame.setLocationRelativeTo(null)
+frame.setAlwaysOnTop(true)
+frame.setVisible(true)
+
+SwingUtilities.invokeLater({ newRegField.requestFocusInWindow() })
+
+// =============================================================
+// ACTIONS
+// =============================================================
+
+clearButton.addActionListener({ e ->
+    for (int i = 0; i < 16; i++) {
+        model.setValueAt("", i, 1)
+        model.setValueAt("", i, 2)
+    }
+    statusLabel.setText("Table cleared.")
+} as java.awt.event.ActionListener)
+
+okButton.addActionListener({ e ->
+    try {
+        def searchText = oldRegField.getText().trim()
+        def replaceText = newRegField.getText().trim()
+        if (replaceText.isEmpty()) { statusLabel.setText("Error: New Reg # required."); return }
+
+        // --- STEP 1: LOCKED FUNCTION 14 & 10 LOGIC ---
+        
+        // Mode 10: Figures
+        logic.figures {
+            if (getType().equals('text-figure') && text.contains(searchText)) {
+                text = text.replaceAll(searchText, replaceText)
+            }
+        }
+
+        // Mode 14: Microblocks & Labels
+        for (def label : logic.labels()) {
+            if (label.name.contains(searchText)) {
+                label.rename(label.name.replaceAll(searchText, replaceText))
+            }
+        }
+
+        logic.microblocks {
+            // 1. Handle Address
+            if (propNames.contains('address') && prop.'address'.contains(searchText)) {
+                prop.'address' = prop.'address'.replaceAll(searchText, replaceText)
+            }
+
+            // 2. Handle Display Name, Ref Name, and Description
+            if (propNames.contains('display name') && prop.'display name'.contains(searchText)) {
+                prop.'display name' = prop.'display name'.replaceAll(searchText, replaceText)
+                
+                if (propNames.contains('description')) {
+                    prop.'description' = prop.'description'.replaceAll(searchText, replaceText)
+                }
+
+                // Reference Name Formatting (LOCKED)
+                def refNameSearch = searchText.toLowerCase().replace(' / ', '_').replace(' - ', '_').replace(' ', '_').replace('/', '_').replace('-', '_').replace("(", '').replace(")", '')
+                def refNameReplace = replaceText.toLowerCase().replace(' / ', '_').replace(' - ', '_').replace(' ', '_').replace('/', '_').replace('-', '_').replace("(", '').replace(")", '')
+
+                prop.'reference name' = prop.'reference name'.replaceAll(refNameSearch, refNameReplace)
+            }
+        }
+
+        // --- STEP 2: PAIRWISE MAPPING (Table Data) ---
+        int mapCount = 0
+        for (int i = 0; i < 16; i++) {
+            String bitDisplayName = model.getValueAt(i, 1).toString().trim().replace('"', '')
+            String bitRefName = model.getValueAt(i, 2).toString().trim()
+            
+            if (bitDisplayName.isEmpty()) continue
+
+            // The register has now been changed to replaceText (e.g. 401509)
+            // So we search for the standard bit pattern
+            def bitSearchText = "PB ${replaceText}." + String.format("%02d", i)
+            
+            // Generate the reference name search string for this bit
+            def bitRefSearch = bitSearchText.toLowerCase().replace(' / ', '_').replace(' - ', '_').replace(' ', '_').replace('/', '_').replace('-', '_').replace("(", '').replace(")", '')
+
+            logic.microblocks {
+                if (propNames.contains('display name') && prop.'display name'.contains(bitSearchText)) {
+                    prop.'display name' = prop.'display name'.replaceAll(bitSearchText, bitDisplayName)
+                    
+                    if (propNames.contains('description')) {
+                        prop.'description' = prop.'description'.replaceAll(bitSearchText, bitDisplayName)
+                    }
+                    
+                    if (!bitRefName.isEmpty()) {
+                        prop.'reference name' = prop.'reference name'.replaceAll(bitRefSearch, bitRefName)
+                    }
+                    mapCount++
+                }
+            }
+        }
+
+        statusLabel.setText("Success!\nGlobal Register and Figures updated.\nApplied ${mapCount} name replaces.")
+        oldRegField.setText(replaceText); newRegField.setText(""); newRegField.requestFocusInWindow()
+
+    } catch (Exception ex) { 
+        statusLabel.setText("ERROR:\n" + ex.toString()) 
+    }
+})
+
+cancelButton.addActionListener({ e -> frame.dispose() })
