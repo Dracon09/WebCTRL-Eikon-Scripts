@@ -1,0 +1,166 @@
+// V1.7 - Combined Global Mode Added
+
+def searchText = "898989898"
+def replaceText = "401509"
+
+def searchMode = "14"   // 1= Display Name Only
+                        // 2= Reference Name Only
+                        // 3= Display Name and adjust reference name and Description
+                        // 4= Network Address
+                        // 5= Inactive Text
+                        // 6= Active Text
+                        // 7= Labels Text
+                        // 8= Alarm Text
+                        // 9= Description Only
+                        // 10= text-figure === text around borders
+                        // 11= property page text blocks
+                        // 12= object instance def X to add to existing
+                        // 13= Labels auto-number from A001 -> A999
+                        // 14= COMBINED (Labels + Address + Display/Ref Name + Description)
+
+def X = 1  
+//=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~
+
+def var1
+
+// --- PART 1: Label Processing (Shared by Mode 7 and 14) ---
+if (searchMode == "7" || searchMode == "14") {
+    println "--- Processing Labels ---"
+    for (def label : logic.labels()) {
+        if (label.name.contains(searchText)) {
+            println "Renaming Label: ${label.name}"
+            var1 = label.name
+            label.rename(var1.replaceAll(searchText, replaceText))
+        }
+    }
+}
+
+// --- PART 2: Specialized Logic (Modes 13 and 10 remain separate) ---
+if (searchMode == "13") {
+    Integer stopY = null
+    def aLabels = []
+    logic.labels() {
+        if (name == "NA") { stopY = getY() }
+    }
+    if (stopY == null) {
+        println "ERROR: NA label not found — aborting mode 13"
+        return
+    }
+    logic.labels() {
+        if (name ==~ /A\d{3}/ && getY() < stopY) {
+            aLabels << [label: delegate, x: getX(), y: getY()]
+        }
+    }
+    aLabels.sort { a, b -> a.y == b.y ? a.x <=> b.x : a.y <=> b.y }
+    int counter = 1
+    aLabels.each { entry ->
+        if (counter > 999) return
+        String newName = String.format("A%03d", counter)
+        entry.label.rename(newName)
+        counter++
+    }
+}
+
+else if (searchMode == "10") {
+    logic.figures {
+        if (getType().equals('text-figure') && text.contains(searchText)) {
+            text = text.replaceAll(searchText, replaceText)
+        }
+    }
+}
+
+// --- PART 3: Microblock Processing (Includes Mode 14) ---
+else if (searchMode != "7") { // Mode 7 is finished above; others need microblocks
+    logic.microblocks {
+
+        // Logic for COMBINED MODE 14
+        if (searchMode == "14") {
+            // 1. Handle Address (from Option 4)
+            if (propNames.contains('address') && prop.'address'.contains(searchText)) {
+                prop.'address' = prop.'address'.replaceAll(searchText, replaceText)
+                println "Updated Address: ${prop.'address'}"
+            }
+
+            // 2. Handle Display Name, Ref Name, and Description (from Option 3)
+            if (propNames.contains('display name') && prop.'display name'.contains(searchText)) {
+                
+                prop.'display name' = prop.'display name'.replaceAll(searchText, replaceText)
+                
+                if (propNames.contains('description')) {
+                    prop.'description' = prop.'description'.replaceAll(searchText, replaceText)
+                }
+
+                // Reference Name Formatting
+                def refNameSearch = searchText.toLowerCase().replace(' / ', '_').replace(' - ', '_').replace(' ', '_').replace('/', '_').replace('-', '_').replace("(", '').replace(")", '')
+                def refNameReplace = replaceText.toLowerCase().replace(' / ', '_').replace(' - ', '_').replace(' ', '_').replace('/', '_').replace('-', '_').replace("(", '').replace(")", '')
+
+                prop.'reference name' = prop.'reference name'.replaceAll(refNameSearch, refNameReplace)
+                println "Updated Block: ${prop.'display name'}"
+            }
+        }
+
+        else if (searchMode == "6") {
+            if (propNames.contains('active text') && prop.'active text'.contains(searchText)) {
+                prop.'active text' = prop.'active text'.replaceAll(searchText, replaceText)
+            }
+        }
+        
+        else if (searchMode == "5") {
+            if (propNames.contains('inactive text') && prop.'inactive text'.contains(searchText)) {
+                prop.'inactive text' = prop.'inactive text'.replaceAll(searchText, replaceText)
+            }
+        }
+
+        else if (searchMode == "4") {
+            if (propNames.contains('address') && prop.'address'.contains(searchText)) {
+                prop.'address' = prop.'address'.replaceAll(searchText, replaceText)
+                def refNameSearch = searchText.toLowerCase().replace(' / ', '_').replace(' - ', '_').replace(' ', '_').replace('/', '_').replace('-', '_').replace("(", '').replace(")", '')
+                def refNameReplace = replaceText.toLowerCase().replace(' / ', '_').replace(' - ', '_').replace(' ', '_').replace('/', '_').replace('-', '_').replace("(", '').replace(")", '')
+                prop.'reference name' = prop.'reference name'.replaceAll(refNameSearch, refNameReplace)
+            }
+        }
+
+        else if (searchMode == "3") {
+            if (propNames.contains('display name') && prop.'display name'.contains(searchText)) {
+                prop.'display name' = prop.'display name'.replaceAll(searchText, replaceText)
+                if (propNames.contains('description')) {
+                    prop.'description' = prop.'description'.replaceAll(searchText, replaceText)
+                }
+                def refNameSearch = searchText.toLowerCase().replace(' / ', '_').replace(' - ', '_').replace(' ', '_').replace('/', '_').replace('-', '_').replace("(", '').replace(")", '')
+                def refNameReplace = replaceText.toLowerCase().replace(' / ', '_').replace(' - ', '_').replace(' ', '_').replace('/', '_').replace('-', '_').replace("(", '').replace(")", '')
+                prop.'reference name' = prop.'reference name'.replaceAll(refNameSearch, refNameReplace)
+            }
+        }
+
+        else if (searchMode == "8") {
+            if (propNames.contains('alarm text') && prop.'alarm text'.contains(searchText)) {
+                prop.'alarm text' = prop.'alarm text'.replaceAll(searchText, replaceText)
+                prop.'return text' = prop.'return text'.replaceAll(searchText, replaceText)
+            }
+        }
+
+        else if (searchMode == "2") {
+            if (propNames.contains('reference name') && prop.'reference name'.contains(searchText)) {
+                prop.'reference name' = prop.'reference name'.replaceAll(searchText, replaceText)
+            }
+        }
+
+        else if (searchMode == "9") {
+            if (propNames.contains('description') && prop.'description'.contains(searchText)) {
+                prop.'description' = prop.'description'.replaceAll(searchText, replaceText)
+            }
+        }
+
+        else if (searchMode == "12") {
+            if (propNames.contains('object instance')) {
+                prop.'object instance' = X + prop.'object instance'
+            }
+        }
+
+        else if (searchMode == "11") {
+            if (propNames.contains('property page text') && prop.'property page text'.contains(searchText)) {
+                prop.'property page text' = prop.'property page text'.replaceAll(searchText, replaceText)
+            }
+        }
+    }
+}
