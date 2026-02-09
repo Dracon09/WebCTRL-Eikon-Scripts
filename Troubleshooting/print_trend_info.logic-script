@@ -1,0 +1,39 @@
+// =============================================================
+// Eikon Property Interrogator (Trend Blocks)
+// Run this to see all hidden API property names in the console
+// =============================================================
+
+println "--- STARTING PROPERTY DUMP ---"
+
+int trendCount = 0
+
+logic.microblocks.each { mb ->
+    // Targets Binary (bdt) and Analog (bat) Trend blocks
+    if (mb.type == 'bdt' || mb.type == 'bat') {
+        trendCount++
+        println ""
+        println "======================================================"
+        println "BLOCK TYPE: ${mb.type}"
+        println "REF NAME  : ${mb.prop.'reference name'}"
+        println "------------------------------------------------------"
+        
+        // Loop through every property name Eikon exposes to the API
+        mb.propNames.each { pName ->
+            try {
+                def val = mb.prop."${pName}"
+                // Display the property name and its current value
+                println "${pName.padRight(30)} : ${val}"
+            } catch (e) {
+                println "${pName.padRight(30)} : [Error Reading Property]"
+            }
+        }
+        println "======================================================"
+    }
+}
+
+if (trendCount == 0) {
+    println "No Trend blocks (BDT or BAT) found in the current logic."
+}
+
+println ""
+println "--- DUMP COMPLETE ---"
