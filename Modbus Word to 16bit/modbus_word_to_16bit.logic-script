@@ -1,30 +1,34 @@
 // =============================================================
 // Map a Modbus word to 16 Bits 
 // 
-// V6.2 - 02-09-2026
+// V6.3 - 02-09-2026
 // Tested on WC 10.0
 // =============================================================
 
 def CONFIG = [
     // --- ALARM CONFIGURATION ---
     enableAlarms      : true,
-    potentialSource   : true,
-    isCritical        : true,
-    alarmCategory     : "HVAC Critical",
-    alarmEnabled      : 1,
-    alarmAckRequired  : false,
-    returnEnabled     : 0,
-    returnAckRequired : false,
+    potentialSource   : true,           // [Potential alarm source]
+    isCritical        : true,           // [Critical]
+    alarmCategory     : "HVAC Critical",// [Category]
+    alarmEnabled      : 1,              // [Alarm Enable] (1 or 0)
+    // alarmText      : "\$source\$ is in alarm.",
+    alarmAckRequired  : false,          // [Alarm requires acknowledge]
+    returnEnabled     : 0,              // [Return Enabled] (1 or 0)
+    // returnText     : "\$source\$ has returned to normal.",
+    returnAckRequired : false,          // [Return requires acknowledge]
     
     // --- TREND CONFIGURATION ---
     enableTrends      : true,
-    enableLog         : true,
-    enableHistorian   : true,
-    maxSamples        : 100,
-    sampleOnCOV       : true,
-    sampleInterval    : 30000, 
-    keepHistoryDays   : 0,
-    useDefaultThresh  : true
+    enableLog         : true,           // [Enable Trend Log]
+    enableHistorian   : true,           // [Enable Trend Historian]
+    maxSamples        : 100,            // [Max samples]
+    sampleOnCOV       : true,           // [Sample on COV]
+    sampleInterval    : 30000,          // [Sample every] (30,000 = 5 mins)
+    keepHistoryDays   : 0,              // [Keep historical trends for]
+    useDefaultThresh  : true,           // [Use default (45% of Max samples)]
+    // activeText     : "On",           // [Active Text]
+    // inactiveText   : "Off"           // [Inactive Text]
 ]
 
 // -------------------------------------------------------------
@@ -81,21 +85,18 @@ def eikonFormatRef = { str ->
 }
 
 // --- 3. GUI SETUP ---
-// RESTORED CHARACTER COUNT RENDERER
 class EikonCellRenderer extends DefaultTableCellRenderer {
     @Override Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int col) {
         Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, col)
         String text = value ? value.toString() : ""
         c.setBackground(isSelected ? table.getSelectionBackground() : Color.WHITE)
         c.setForeground(isSelected ? table.getSelectionForeground() : Color.BLACK)
-        c.setFont(table.getFont())
-
-        if (col == 1 && text.length() > 40) { // Display Name > 40: Red Text
+        if (col == 1 && text.length() > 40) {
             c.setForeground(Color.RED)
             c.setFont(c.getFont().deriveFont(Font.BOLD))
-        } else if (col == 2) { // Reference Name Warnings
-            if (text.length() > 40) c.setBackground(new Color(255, 100, 100)) // Red Background
-            else if (text.length() > 36) c.setBackground(new Color(255, 255, 150)) // Yellow Background
+        } else if (col == 2) {
+            if (text.length() > 40) c.setBackground(new Color(255, 100, 100))
+            else if (text.length() > 36) c.setBackground(new Color(255, 255, 150))
         }
         return c
     }
@@ -108,12 +109,9 @@ JTable table = new JTable(model)
 table.setDefaultRenderer(Object.class, new EikonCellRenderer())
 table.setCellSelectionEnabled(true)
 table.setRowHeight(22)
-
 table.getColumnModel().getColumn(0).setMaxWidth(40)
-table.getColumnModel().getColumn(0).setMinWidth(40)
 table.setPreferredScrollableViewportSize(new Dimension(750, 360))
 
-// PASTE LOGIC
 table.addKeyListener(new KeyAdapter() {
     public void keyPressed(KeyEvent e) {
         if ((e.getModifiersEx() & Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()) != 0 && e.getKeyCode() == KeyEvent.VK_V) {
@@ -136,7 +134,7 @@ model.addTableModelListener({ e ->
 
 JTextField oldRegField = new JTextField("898989898", 10)
 JTextField newRegField = new JTextField("", 10)
-JTextArea statusLabel = new JTextArea("Ready\nV6.2 - All Functions Verified")
+JTextArea statusLabel = new JTextArea("Ready\nV6.3 - Manual Reg Retention & Full Config")
 statusLabel.setEditable(false)
 statusLabel.setBackground(new Color(240, 240, 240))
 
@@ -147,28 +145,18 @@ JButton clearButton = new JButton("Clear Labels")
 JButton cancelButton = new JButton("Close")
 
 JPanel regPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 5))
-regPanel.add(new JLabel("Symbol Reg#:"))
-regPanel.add(oldRegField)
-regPanel.add(new JLabel("Target Reg#:"))
-regPanel.add(newRegField)
+regPanel.add(new JLabel("Symbol Reg#:")); regPanel.add(oldRegField)
+regPanel.add(new JLabel("Target Reg#:")); regPanel.add(newRegField)
 
 JPanel buttonPanel = new JPanel(); buttonPanel.add(okButton); buttonPanel.add(swapButton); buttonPanel.add(fixOCRButton); buttonPanel.add(clearButton); buttonPanel.add(cancelButton)
-
 JPanel bottomPanel = new JPanel(); bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS))
-bottomPanel.add(regPanel)
-bottomPanel.add(new JScrollPane(statusLabel) {{ setPreferredSize(new Dimension(500, 50)) }})
-bottomPanel.add(buttonPanel)
+bottomPanel.add(regPanel); bottomPanel.add(new JScrollPane(statusLabel) {{ setPreferredSize(new Dimension(500, 50)) }}); bottomPanel.add(buttonPanel)
 
-JPanel mainPanel = new JPanel(new BorderLayout(5, 5))
-mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10))
-mainPanel.add(new JScrollPane(table), BorderLayout.CENTER)
-mainPanel.add(bottomPanel, BorderLayout.SOUTH)
+JPanel mainPanel = new JPanel(new BorderLayout(5, 5)); mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10))
+mainPanel.add(new JScrollPane(table), BorderLayout.CENTER); mainPanel.add(bottomPanel, BorderLayout.SOUTH)
 
-JFrame frame = new JFrame("Modbus Word to 16 bit Mapping V6.2")
-frame.setContentPane(mainPanel)
-frame.pack()
-frame.setLocationRelativeTo(null)
-frame.setAlwaysOnTop(true)
+JFrame frame = new JFrame("Modbus Word to 16 bit Mapping V6.3")
+frame.setContentPane(mainPanel); frame.pack(); frame.setLocationRelativeTo(null); frame.setAlwaysOnTop(true)
 
 // --- 4. ACTION LISTENERS ---
 swapButton.addActionListener(new ActionListener() { public void actionPerformed(ActionEvent e) { 
@@ -209,17 +197,26 @@ okButton.addActionListener(new ActionListener() {
                         prop.'display name' = dName
                         if (propNames.contains('description')) prop.'description' = dName
                         
+                        // ALARM LOGIC (Step 1 & 2 Double-Try)
                         if (type == 'event' && CONFIG.enableAlarms) {
                             if (CONFIG.containsKey('potentialSource')) prop.'potential alarm source' = CONFIG.potentialSource
                             if (CONFIG.containsKey('isCritical'))      prop.'critical' = CONFIG.isCritical
                             if (CONFIG.containsKey('alarmCategory'))  try { prop.'category' = CONFIG.alarmCategory } catch(ex) {}
+                            if (CONFIG.containsKey('alarmText'))      prop.'alarm text' = CONFIG.alarmText
+                            if (CONFIG.containsKey('returnText'))     prop.'return text' = CONFIG.returnText
                             if (CONFIG.containsKey('alarmEnabled')) {
                                 def val = CONFIG.alarmEnabled
                                 try { prop.'alarm enabled' = val } catch(ex) { try { prop.'alarm enabled' = (val==1) } catch(ex2) { prop.'alarm enabled' = "${val}" } }
                             }
                             if (CONFIG.containsKey('alarmAckRequired')) prop.'alarm requires acknowledge' = CONFIG.alarmAckRequired
+                            if (CONFIG.containsKey('returnEnabled')) {
+                                def rval = CONFIG.returnEnabled
+                                try { prop.'return enabled' = rval } catch(ex) { try { prop.'return enabled' = (rval==1) } catch(ex2) { prop.'return enabled' = "${rval}" } }
+                            }
+                            if (CONFIG.containsKey('returnAckRequired')) prop.'return requires acknowledge' = CONFIG.returnAckRequired
                         }
                         
+                        // TREND LOGIC (Step 1 & 2 Double-Try)
                         if ((type == 'bdt' || type == 'bat') && CONFIG.enableTrends) {
                             if (CONFIG.containsKey('enableLog')) {
                                 def lval = CONFIG.enableLog
@@ -227,7 +224,12 @@ okButton.addActionListener(new ActionListener() {
                             }
                             if (CONFIG.containsKey('enableHistorian')) prop.'enable trend historian' = CONFIG.enableHistorian
                             if (CONFIG.containsKey('maxSamples') && propNames.contains('allocate memory for')) prop.'allocate memory for' = CONFIG.maxSamples
+                            if (CONFIG.containsKey('keepHistoryDays')) prop.'keep historical trends for' = CONFIG.keepHistoryDays
+                            if (CONFIG.containsKey('sampleOnCOV'))     prop.'trend sample type' = CONFIG.sampleOnCOV
                             if (CONFIG.sampleOnCOV == false && CONFIG.containsKey('sampleInterval')) prop.'sample every' = CONFIG.sampleInterval
+                            if (CONFIG.containsKey('useDefaultThresh')) prop.'use trend notification threshold' = CONFIG.useDefaultThresh
+                            if (CONFIG.containsKey('activeText'))      prop.'active text' = CONFIG.activeText
+                            if (CONFIG.containsKey('inactiveText'))    prop.'inactive text' = CONFIG.inactiveText
                         }
 
                         String targetSuffix = (type == "bat" || type == "bdt") ? "_tnd" : (type == "event" ? "_alm" : "_bv")
