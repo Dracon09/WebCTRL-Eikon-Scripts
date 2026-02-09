@@ -1,0 +1,17 @@
+// This script will iterate through the microblocks in a program
+// and return a list of each type of microblock encountered along with
+// its accessible properties.
+
+def types = []
+logic.microblocks {
+  if (types.contains(type)) {
+
+  }
+  else{
+    types.add(type)
+    println "${type}"
+    propNames.each() {
+       println "  ${it}"
+    }
+  }
+}
