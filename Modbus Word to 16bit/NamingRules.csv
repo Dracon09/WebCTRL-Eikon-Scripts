@@ -1,0 +1,93 @@
+Air Condition,AC
+Air Handling Unit,AHU
+Analog Network Input,ANI
+Analog Network Output,ANO
+Air Source Heat Pump,ASHP
+Automatic Transfer Switch,ATS
+Booster Pump,BP
+Building Static Pressure,BSP
+British Thermal Unit,BTU
+Constant Air Volume,CAV
+Clean Dry Air,CDA
+Cubic Feet per Minute,CFM
+Chilled Water Pump,CHWP
+Chilled Water Return,CHWR
+Chilled Water Supply,CHWS
+Chilled Water,CHW
+Carbon Monoxide,CO
+Carbon Dioxide,CO2
+Computer Room Air Conditioner,CRAC
+Computer Room Air Handler,CRAH
+Cooling Tower,CT
+Condenser Water Pump,CWP
+Condenser Water Return,CWR
+Condenser Water Supply,CWS
+Condenser Water,CW
+Discharge Air Temperature,DAT
+Domestic Hot Water Return,DHWR
+Domestic Hot Water Supply,DHWS
+Domestic Hot Water,DHW
+Differential Pressure,DP
+Duct Static Pressure,DSP
+Direct Expansion,DX
+Electronically Commutated Motor,ECM
+Exhaust Fan,EF
+Emergency Power Off,EPO
+Equipment,EQ
+Electro Static Precipitator,ESP
+Fan Coil Unit,FCU
+Fan Terminal Unit,FTU
+Grease Exhaust Fan,GEF
+Gallon Per Minute,gpm
+Heating Hot Water,HHW
+Heat Recovery Chiller,HRCH
+Hot Water Pump,HWP
+Hot Water Return,HWR
+Hot Water Supply,HWS
+Hot Water,HW
+Heat Exchanger,HX
+Kitchen Exhaust Fan,KEF
+Mixed Air Temperature,MAT
+Mixed Air Humidity,MAH
+Mixed Air,MA
+Outside Air Humidity,OAH
+Outside Air Temperature,OAT
+Outside Air,OA
+Out of Range,OOR
+Primary Chilled Water Pump,PCHWP
+Primary Chilled Water Return,PCHWR
+Primary Chilled Water Supply,PCHWS
+Pollution Control Unit,PCU
+Pressure Differential Transmitter,PDT
+Primary Hot Water Pump,PWHP
+Primary Hot Water Return,PHWR
+Primary Hot Water Supply,PHWS
+Proportional Integral Derivative,PID
+Return Air Humidity,RAH
+Return Air Temperature,RAT
+Return Air,RA
+Return Fan,RF
+Reheat,RH
+Revolution Per Minute,RPM
+Radiant Water Pump,RWP
+Return Water Temperature,RWT
+Supply Air Humidity,SAH
+Supply Air Temperature,SAT
+Supply Air,SA
+Supply Fan,SF
+Secondary Chilled Water Pump,SCHWP
+Secondary Chilled Water Return,SCHWR
+Secondary Chilled Water Supply,SCHWS
+Secondary Hot Water Pump,SHWP
+Secondary Hot Water Return,SHWR
+Secondary Hot Water Supply,SHWS
+Setpoint,SP
+Stop,Stop
+Supply Water Temperature,SWT
+Thermal Energy Storage,TES
+Variable Air Volume,VAV
+Variable Frequency Drive,VFD
+Variable Volume Exhaust,VVE
+Zone Temperature,ZNT
+Zone Sensor,ZS
+Alarm,alm
