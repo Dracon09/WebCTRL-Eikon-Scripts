@@ -1,0 +1,5 @@
+//print all labels in the control program
+for( def label: logic.labels() )
+{
+   println("label: " + label.name + " " + label.x + "," + label.y )
+}
