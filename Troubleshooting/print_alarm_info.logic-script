@@ -1,0 +1,18 @@
+// Deep Scan for Alarm and Return properties
+logic.microblocks {
+    if (type == 'event') {
+        println "--- Checking Event Block: ${prop.'reference name'} ---"
+        
+        // 1. List EVERY property name available so we can find the hidden ones
+        println "Available Properties: " + propNames.join(", ")
+        
+        // 2. Look for any property containing 'alarm' or 'message' or 'text'
+        propNames.each { pName ->
+            def lowerName = pName.toLowerCase()
+            if (lowerName.contains("alarm") || lowerName.contains("return") || lowerName.contains("message")) {
+                println "   Found Property [${pName}]: ${prop."$pName"}"
+            }
+        }
+        println "------------------------------------------------"
+    }
+}
