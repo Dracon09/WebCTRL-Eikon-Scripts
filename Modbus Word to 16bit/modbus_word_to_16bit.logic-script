@@ -1,7 +1,7 @@
 // =============================================================
 // Map a Modbus word to 16 Bits 
 // 
-// V6.3 - 02-09-2026
+// V6.4.2 - 02-12-2026
 // Tested on WC 10.0
 // =============================================================
 
@@ -74,13 +74,23 @@ class RenameTracker {
 }
 def tracker = new RenameTracker(this)
 def shortenMap = [:]
-if (csvFile.exists()) {
-    csvFile.eachLine { line -> def p = line.split(','); if (p.size() == 2) shortenMap.put(p[0].trim(), p[1].trim()) }
+
+def loadNamingRules = {
+    shortenMap.clear()
+    if (csvFile.exists()) {
+        csvFile.eachLine { line -> 
+            if (!line.startsWith("#")) {
+                def p = line.split(','); if (p.size() == 2) shortenMap.put(p[0].trim(), p[1].trim()) 
+            }
+        }
+    }
 }
+loadNamingRules()
+
 def eikonFormatRef = { str ->
     if (!str) return ""
     def s = str
-    shortenMap.each { k, v -> s = s.replaceAll("(?i)" + k, v) }
+    shortenMap.each { k, v -> s = s.replaceAll("(?i)\\b" + k + "\\b", v) }
     return makeRefSafe(s)
 }
 
@@ -92,8 +102,7 @@ class EikonCellRenderer extends DefaultTableCellRenderer {
         c.setBackground(isSelected ? table.getSelectionBackground() : Color.WHITE)
         c.setForeground(isSelected ? table.getSelectionForeground() : Color.BLACK)
         if (col == 1 && text.length() > 40) {
-            c.setForeground(Color.RED)
-            c.setFont(c.getFont().deriveFont(Font.BOLD))
+            c.setForeground(Color.RED); c.setFont(c.getFont().deriveFont(Font.BOLD))
         } else if (col == 2) {
             if (text.length() > 40) c.setBackground(new Color(255, 100, 100))
             else if (text.length() > 36) c.setBackground(new Color(255, 255, 150))
@@ -107,18 +116,41 @@ def data = (0..15).collect { [it.toString(), "", ""] } as Object[][]
 DefaultTableModel model = new DefaultTableModel(data, columnNames as Object[]) { @Override boolean isCellEditable(int r, int c) { return c != 0 } }
 JTable table = new JTable(model)
 table.setDefaultRenderer(Object.class, new EikonCellRenderer())
-table.setCellSelectionEnabled(true)
 table.setRowHeight(22)
 table.getColumnModel().getColumn(0).setMaxWidth(40)
-table.setPreferredScrollableViewportSize(new Dimension(750, 360))
+table.setCellSelectionEnabled(true)
 
+// --- COPY & PASTE LOGIC ---
 table.addKeyListener(new KeyAdapter() {
     public void keyPressed(KeyEvent e) {
-        if ((e.getModifiersEx() & Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()) != 0 && e.getKeyCode() == KeyEvent.VK_V) {
-            int startRow = table.getSelectedRow() == -1 ? 0 : table.getSelectedRow()
+        int mask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx()
+        if ((e.getModifiersEx() & mask) != 0 && e.getKeyCode() == KeyEvent.VK_C) {
+            StringBuilder sbf = new StringBuilder()
+            int[] rows = table.getSelectedRows(); int[] cols = table.getSelectedColumns()
+            for (int r : rows) {
+                for (int c : cols) {
+                    sbf.append(table.getValueAt(r, c))
+                    if (c != cols[cols.length-1]) sbf.append("\t")
+                }
+                sbf.append("\n")
+            }
+            StringSelection sel = new StringSelection(sbf.toString())
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(sel, sel)
+            e.consume()
+        }
+        if ((e.getModifiersEx() & mask) != 0 && e.getKeyCode() == KeyEvent.VK_V) {
+            int rStart = table.getSelectedRow() == -1 ? 0 : table.getSelectedRow()
+            int cStart = table.getSelectedColumn() == -1 ? 1 : table.getSelectedColumn()
             try {
                 String cb = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null).getTransferData(DataFlavor.stringFlavor)
-                cb.split("\\r?\\n").eachWithIndex { line, i -> if ((startRow + i) < 16) model.setValueAt(line.trim(), startRow + i, 1) }
+                cb.split("\\r?\\n").eachWithIndex { line, i ->
+                    if ((rStart + i) < 16) {
+                        String[] cells = line.split("\t")
+                        cells.eachWithIndex { val, j ->
+                            if ((cStart + j) < 3 && (cStart + j) > 0) model.setValueAt(val.trim(), rStart + i, cStart + j)
+                        }
+                    }
+                }
             } catch (Exception ex) { }
             e.consume()
         }
@@ -126,17 +158,20 @@ table.addKeyListener(new KeyAdapter() {
 })
 
 model.addTableModelListener({ e ->
-    if (e.getType() == 0 && e.getColumn() == 1) {
-        int r = e.getFirstRow(); String d = model.getValueAt(r, 1).toString()
-        if (d) SwingUtilities.invokeLater({ model.setValueAt(eikonFormatRef(d), r, 2) })
+    if (e.getType() == 0 && (e.getColumn() == 1)) {
+        int r = e.getFirstRow()
+        Object val = model.getValueAt(r, 1)
+        if (val != null) {
+            String d = val.toString()
+            SwingUtilities.invokeLater({ model.setValueAt(eikonFormatRef(d), r, 2) })
+        }
     }
 } as javax.swing.event.TableModelListener)
 
 JTextField oldRegField = new JTextField("898989898", 10)
 JTextField newRegField = new JTextField("", 10)
-JTextArea statusLabel = new JTextArea("Ready\nV6.3 - Manual Reg Retention & Full Config")
-statusLabel.setEditable(false)
-statusLabel.setBackground(new Color(240, 240, 240))
+JTextArea statusLabel = new JTextArea("Ready\nV6.4.2 - Fully Restored Logic")
+statusLabel.setEditable(false); statusLabel.setBackground(new Color(240, 240, 240))
 
 JButton okButton = new JButton("OK")
 JButton swapButton = new JButton("Swap Bits")
@@ -144,29 +179,55 @@ JButton fixOCRButton = new JButton("Fix OCR")
 JButton clearButton = new JButton("Clear Labels")
 JButton cancelButton = new JButton("Close")
 
+// --- MENU BAR ---
+JMenuBar menuBar = new JMenuBar()
+JMenu editMenu = new JMenu("Edit")
+JMenuItem editCsvItem = new JMenuItem("Edit Naming Rules...")
+JMenuItem reloadCsvItem = new JMenuItem("Reload Naming Rules")
+
+editCsvItem.addActionListener({ 
+    if (csvFile.exists()) { Desktop.getDesktop().edit(csvFile) }
+    else { JOptionPane.showMessageDialog(null, "File not found: " + csvFile.absolutePath) }
+} as ActionListener)
+
+reloadCsvItem.addActionListener({ 
+    loadNamingRules()
+    for (int i=0; i<16; i++) { 
+        String d = model.getValueAt(i, 1).toString()
+        if (d) model.setValueAt(eikonFormatRef(d), i, 2) 
+    }
+    statusLabel.setText("Rules reloaded.")
+} as ActionListener)
+
+editMenu.add(editCsvItem); editMenu.add(reloadCsvItem); menuBar.add(editMenu)
+
+// --- LAYOUT ---
 JPanel regPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 5))
 regPanel.add(new JLabel("Symbol Reg#:")); regPanel.add(oldRegField)
 regPanel.add(new JLabel("Target Reg#:")); regPanel.add(newRegField)
-
 JPanel buttonPanel = new JPanel(); buttonPanel.add(okButton); buttonPanel.add(swapButton); buttonPanel.add(fixOCRButton); buttonPanel.add(clearButton); buttonPanel.add(cancelButton)
 JPanel bottomPanel = new JPanel(); bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS))
 bottomPanel.add(regPanel); bottomPanel.add(new JScrollPane(statusLabel) {{ setPreferredSize(new Dimension(500, 50)) }}); bottomPanel.add(buttonPanel)
-
 JPanel mainPanel = new JPanel(new BorderLayout(5, 5)); mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10))
 mainPanel.add(new JScrollPane(table), BorderLayout.CENTER); mainPanel.add(bottomPanel, BorderLayout.SOUTH)
 
-JFrame frame = new JFrame("Modbus Word to 16 bit Mapping V6.3")
+JFrame frame = new JFrame("Modbus Word to 16 bit Mapping V6.4.2")
+frame.setJMenuBar(menuBar)
 frame.setContentPane(mainPanel); frame.pack(); frame.setLocationRelativeTo(null); frame.setAlwaysOnTop(true)
 
-// --- 4. ACTION LISTENERS ---
-swapButton.addActionListener(new ActionListener() { public void actionPerformed(ActionEvent e) { 
+swapButton.addActionListener({ 
     Object[][] temp = new Object[16][2]; for (int i = 0; i < 16; i++) { temp[i][0] = model.getValueAt(i, 1); temp[i][1] = model.getValueAt(i, 2) }
     for (int i = 0; i < 16; i++) { model.setValueAt(temp[15-i][0], i, 1); model.setValueAt(temp[15-i][1], i, 2) }
-}})
-fixOCRButton.addActionListener(new ActionListener() { public void actionPerformed(ActionEvent e) { 
-    for (int i = 0; i < 16; i++) { String n = model.getValueAt(i, 1).toString(); if (n) model.setValueAt(n.replaceAll("(?<=[a-z0-9])(?=[A-Z])", " ").trim(), i, 1) }
-}})
-clearButton.addActionListener(new ActionListener() { public void actionPerformed(ActionEvent e) { for (int i = 0; i < 16; i++) { model.setValueAt("", i, 1); model.setValueAt("", i, 2) } }})
+} as ActionListener)
+
+fixOCRButton.addActionListener({ 
+    for (int i = 0; i < 16; i++) { 
+        String n = model.getValueAt(i, 1).toString(); 
+        if (n) model.setValueAt(n.replaceAll("(?<=[a-z0-9])(?=[A-Z])", " ").trim(), i, 1) 
+    }
+} as ActionListener)
+
+clearButton.addActionListener({ for (int i = 0; i < 16; i++) { model.setValueAt("", i, 1); model.setValueAt("", i, 2) } } as ActionListener)
 
 okButton.addActionListener(new ActionListener() {
     public void actionPerformed(ActionEvent eventObj) {
@@ -174,10 +235,8 @@ okButton.addActionListener(new ActionListener() {
             def oldR = oldRegField.getText().trim(); def newR = newRegField.getText().trim()
             if (!newR) { statusLabel.setText("Target Reg Required"); return }
             logic.append { symbol(symbolFile.absolutePath) { } }
-
             logic.figures { if (getType()=='text-figure' && text.contains(oldR)) text = text.replaceAll(oldR, newR) }
             logic.labels().each { if (it.name.contains(oldR)) tracker.stage(it, it.name.replaceAll(oldR, newR)) }
-            
             logic.microblocks {
                 if (propNames.contains('address')) prop.'address' = prop.'address'.replaceAll(oldR, newR)
                 if (propNames.contains('display name') && prop.'display name'.contains(oldR)) {
@@ -186,18 +245,16 @@ okButton.addActionListener(new ActionListener() {
                 }
             }
             tracker.commit()
-
             for (int i = 0; i < 16; i++) {
                 String dName = model.getValueAt(i, 1).toString().trim(); String rBase = model.getValueAt(i, 2).toString().trim()
                 if (dName == "") continue
                 String hook = "pb_${newR}_" + String.format("%02d", i)
-                
                 logic.microblocks {
                     if (prop.'reference name'.contains(hook)) {
                         prop.'display name' = dName
                         if (propNames.contains('description')) prop.'description' = dName
                         
-                        // ALARM LOGIC (Step 1 & 2 Double-Try)
+                        // ALARM LOGIC (Step 1 & 2 Double-Try Logic)
                         if (type == 'event' && CONFIG.enableAlarms) {
                             if (CONFIG.containsKey('potentialSource')) prop.'potential alarm source' = CONFIG.potentialSource
                             if (CONFIG.containsKey('isCritical'))      prop.'critical' = CONFIG.isCritical
@@ -216,7 +273,7 @@ okButton.addActionListener(new ActionListener() {
                             if (CONFIG.containsKey('returnAckRequired')) prop.'return requires acknowledge' = CONFIG.returnAckRequired
                         }
                         
-                        // TREND LOGIC (Step 1 & 2 Double-Try)
+                        // TREND LOGIC (Step 1 & 2 Double-Try Logic)
                         if ((type == 'bdt' || type == 'bat') && CONFIG.enableTrends) {
                             if (CONFIG.containsKey('enableLog')) {
                                 def lval = CONFIG.enableLog
@@ -242,5 +299,5 @@ okButton.addActionListener(new ActionListener() {
     }
 })
 
-cancelButton.addActionListener(new ActionListener() { public void actionPerformed(ActionEvent e) { frame.dispose() } })
+cancelButton.addActionListener({ frame.dispose() } as ActionListener)
 frame.setVisible(true)
