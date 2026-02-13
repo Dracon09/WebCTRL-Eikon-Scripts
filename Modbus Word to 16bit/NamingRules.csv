@@ -1,93 +1,283 @@
-Air Condition,AC
+# --- EQUIPMENT & ZONES ---
 Air Handling Unit,AHU
-Analog Network Input,ANI
-Analog Network Output,ANO
-Air Source Heat Pump,ASHP
-Automatic Transfer Switch,ATS
-Booster Pump,BP
-Building Static Pressure,BSP
-British Thermal Unit,BTU
-Constant Air Volume,CAV
-Clean Dry Air,CDA
-Cubic Feet per Minute,CFM
-Chilled Water Pump,CHWP
-Chilled Water Return,CHWR
-Chilled Water Supply,CHWS
-Chilled Water,CHW
-Carbon Monoxide,CO
-Carbon Dioxide,CO2
+Air Handler Unit,AHU
+Air Terminal Unit,ATU
+Battery,BATT
+Boiler,BLR
+Branch Selector,BS
+Cabinet Unit Heater,CUH
+Chemical Treatment,CHM
+Chilled Beam,CHB
+Chilled Water Pump,CHP
+Chiller,CHL
+Computer Room AC Unit,CRU
 Computer Room Air Conditioner,CRAC
-Computer Room Air Handler,CRAH
-Cooling Tower,CT
 Condenser Water Pump,CWP
-Condenser Water Return,CWR
-Condenser Water Supply,CWS
-Condenser Water,CW
-Discharge Air Temperature,DAT
-Domestic Hot Water Return,DHWR
-Domestic Hot Water Supply,DHWS
+Cooling Tower,CTR
+Dedicated Outside Air System,DOAS
+Direct Expansion Cooling,DX
 Domestic Hot Water,DHW
-Differential Pressure,DP
-Duct Static Pressure,DSP
-Direct Expansion,DX
-Electronically Commutated Motor,ECM
+Domestic Water Pump,DWP
+Electric Duct Heater,EDH
+Elevator,ELEV
+Evaporator,EVAP
 Exhaust Fan,EF
-Emergency Power Off,EPO
-Equipment,EQ
-Electro Static Precipitator,ESP
+Fan,FAN
+Fan Coil Unit with DX cooling,FCX
+Fan Coil Unit with Water coil,FCW
 Fan Coil Unit,FCU
-Fan Terminal Unit,FTU
-Grease Exhaust Fan,GEF
-Gallon Per Minute,gpm
-Heating Hot Water,HHW
-Heat Recovery Chiller,HRCH
-Hot Water Pump,HWP
+Fin Tube Radiator,FTR
+Floor Heating System,FLH
+Fume Hood,FH
+Generator,GEN
+Heat Exchanger,HTX
+Heat Pump (Water Source),HPW
+Heat Pump,HP
+Heating Water Pump,HWP
+Heating Water System,HW
+Inverter L-ADIO,INV
+Luminaire,LUM
+Make-Up Air Unit,MAU
+Power Distribution Unit,PDU
+Relief Fan,REF
+Return Fan,RF
+Roof Top Unit,RTU
+Sand Pump,SDP
+Supply Fan,SF
+Unit Heater,UH
+Unit Ventilator,UV
+Variable Refrigerant Flow,VRF
+Zone,ZN
+
+# --- SENSORS & MEASUREMENTS ---
+Amperage,AMP
+Apparent Power,VA
+Average,AVG
+Barometric Pressure,BARO
+British Thermal Units,BTU
+Building Static Pressure,BSP
+Cabinet Outdoor Air Temperature,OAC
+Carbon Dioxide,CO2
+Carbon Monoxide,CO
+Cold Deck Temperature,CDT
+Condensate,COND
+Current (Amperes),AMP
+Current,I
+Dewpoint,DEW
+Differential,DLT
+Efficiency,EFF
+Entering,ENT
+Enthalpy,ENTH
+Exhaust Velocity Pressure,EVP
+Feels Like,FEELS
+Frequency,HZ
+Heat Coil Temperature,HCT
+Hot Deck Temperature,HDT
 Hot Water Return,HWR
 Hot Water Supply,HWS
-Hot Water,HW
-Heat Exchanger,HX
-Kitchen Exhaust Fan,KEF
+Leaving,LVG
+Level Sensor,LVL
+Light,LIT
 Mixed Air Temperature,MAT
-Mixed Air Humidity,MAH
-Mixed Air,MA
-Outside Air Humidity,OAH
-Outside Air Temperature,OAT
-Outside Air,OA
-Out of Range,OOR
-Primary Chilled Water Pump,PCHWP
-Primary Chilled Water Return,PCHWR
-Primary Chilled Water Supply,PCHWS
-Pollution Control Unit,PCU
-Pressure Differential Transmitter,PDT
-Primary Hot Water Pump,PWHP
-Primary Hot Water Return,PHWR
-Primary Hot Water Supply,PHWS
-Proportional Integral Derivative,PID
+Outdoor Air Temperature,OAZ
+Outside Enthalpy,OAE
+Particulate Matter,PM
+Power Factor,PF
+Reactive Power,VAR
+Reactive,REAC
+Real Power,W
+Relative Humidity,RH
+Return Air Enthalpy,RAE
 Return Air Humidity,RAH
 Return Air Temperature,RAT
-Return Air,RA
-Return Fan,RF
-Reheat,RH
-Revolution Per Minute,RPM
-Radiant Water Pump,RWP
+Return Static Pressure,RSP
+Return Velocity Pressure,RVP
 Return Water Temperature,RWT
+Room Humidity,RMH
+Room Temperature,RMT
 Supply Air Humidity,SAH
 Supply Air Temperature,SAT
-Supply Air,SA
-Supply Fan,SF
-Secondary Chilled Water Pump,SCHWP
-Secondary Chilled Water Return,SCHWR
-Secondary Chilled Water Supply,SCHWS
-Secondary Hot Water Pump,SHWP
-Secondary Hot Water Return,SHWR
-Secondary Hot Water Supply,SHWS
-Setpoint,SP
-Stop,Stop
+Supply Static Pressure,SSP
+Supply Velocity Pressure,SVP
 Supply Water Temperature,SWT
-Thermal Energy Storage,TES
-Variable Air Volume,VAV
-Variable Frequency Drive,VFD
-Variable Volume Exhaust,VVE
+Total Harmonic Distortion,THD
+Total Volatile Organic Compound,TVOC
+Voltage,V
+Wet Bulb,WB
 Zone Temperature,ZNT
-Zone Sensor,ZS
-Alarm,alm
+
+# --- COMMANDS, MODES & SETPOINTS ---
+Adjustable,ADJ
+Bypass,BYP
+Circulate,CIRC
+Command,CMD
+Constant Air Volume,CAV
+Cool-Down Mode,CDM
+Cool-Down Setpoint,CDS
+Day Mode Switch Over,DYM
+Day Mode,DYM
+Day Save Time,DST
+Dead Band Switch,DBS
+Demand,DMD
+Differential CFM Setpoint,DCS
+Economizer Mode,ECM
+Economizer Switch Set Point,DBS
+Effective,EFF
+Face and Bypass Damper Output,FBO
+Flow Differential %,DSS
+Heating Coil Valve Output,HCO
+History,HIS
+Humidifier Valve Output,HUO
+Humidity Override Setpoint,HOS
+Humidity Setpoint,HUS
+Load,LD
+Makeup,MKU
+Mixed Air Damper Output,MAO
+Mixed Air Minimum Position,MAM
+Mixed Air Setpoint,MAS
+Mode,MOD
+Night Cooling Mode,NCM
+Night Cooling Setpoint,NCS
+Night Heating Mode,NHM
+Night Heating Setpoint,NHS
+Night Setback,NSB
+Number Of,NO
+Number,NO
+Occupancy,OCC
+Occupied Mode,OCC
+Override,OVR
+Purge,PRG
+Quantity,QTY
+Reheat,RHT
+Return Air Setpoint,RAS
+Return CFM Set Point,RCS
+Return CFM,RCF
+Return VFD Output,RVO
+Run,RUN
+Season,SEA
+Setpoint,SP
+SSTO Calc Start,SCS
+SSTO Cool Temp,SCT
+SSTO Early Start,SES
+Standby,STBY
+Static Pressure Setpoint,SPS
+Supply Air Setpoint,SAS
+Supply CFM,SCF
+Supply Humidity Setpoint,SHS
+Supply Static Setpoint,SSS
+Supply VFD Output,SVO
+Unoccupied,UNOCC
+Variable Air Volume,VAV
+Warm-Up Mode,WUM
+Warm-Up Setpoint,WUS
+Writable,WR
+
+# --- PID GAINS & CONTROLLERS ---
+CFM I-Gain,IGC
+CFM P-Gain,PGC
+Heating Coil Controller,VR2
+Heating Coil I-Gain,IG2
+Heating Coil P-Gain,PG2
+Humidity Controller,VRH
+Mixed Air Temperature I-Gain,IGM
+Mixed Air Temperature P-Gain,PGM
+Return Humidity I-Gain,IG8
+Return Humidity P-Gain,PG8
+Static I-Gain,IG9
+Static P-Gain,PG9
+Supply Air Controller,VRT
+Supply Humidity I-Gain,IG7
+Supply Humidity P-Gain,PG7
+Supply Temperature I-Gain,IGT
+Supply Temperature P-Gain,PGT
+
+# --- COMPONENTS & FLUIDS ---
+1st Stage DX Cooling,DX1
+1st Stage Gas Heating,GH1
+2nd Stage DX Cooling,DX2
+2nd Stage Gas Heating,GH2
+Alternating Current,AC
+Bypass Contactor,BYP
+Bypass Valve,BPV
+Cold Deck Damper,CDD
+Combustion Air Damper,CAD
+Cooling Coil Pump,CCP
+Cooling Coil Valve,CCV
+Cooling,CLG
+Direct Current,DC
+Domestic Water,DOM
+Duct,DCT
+Exhaust Damper,EAD
+Exhaust,EXH
+Face and Bypass Damper,FBD
+Face Bypass Damper,FBD
+Filter,FLT
+Flow Control Valve,FCV
+Heat Stage,HTS
+Heating Coil Pump,HCP
+Heating Coil Valve,HCV
+Heating,HTG
+High/Low Speed Command,HLS
+Hot Deck Damper,HDD
+Humidity Valve,HUV
+Inlet Vane,ILV
+Isolation Damper,ISD
+Isolation Valve,ISV
+Mixed Air Damper,MAD
+Natural Gas,NGAS
+Outside Air Damper,OAD
+Propane,PROP
+Refrigerant,REFR
+Return Fan,RAF
+Return VFD,RVD
+Return,RET
+Start/Stop Command,SS
+Steam,STM
+Strobe,STB
+Supply Air Damper,SAD
+Supply Fan,SAF
+Supply VFD,SVD
+Supply,SUP
+
+# --- SAFETY & ALARMS ---
+Alarm,ALM
+Critical,CRIT
+DX Cooling Stage,DXS
+Emergency Power Off Button,EPO
+Emergency Stop Switch,EMS
+Enable Command,ENB
+Fire Alarm,FIRE
+Flame Failure,FF
+Free Cooling Status,FC
+High Static Pressure,HSP
+High Temp Detector,HTD
+Low Suction Pressure,LSP
+Low Temp Detector,LTD
+Magnetic Door Lock,DLK
+Major,MAJ
+Minor,MIN
+Motion Sensor,MOT
+Photocell,PHO
+Proof,PRF
+Return Fan High Static,RSP
+Return Smoke Detector,RSD
+Supply Smoke Detector,SSD
+
+# --- Last Chance Cleanup ---
+Temperature,Temp
+High,Hi
+Low,Lo
+Status,Sta
+Running,Run
+Engine,Eng
+Pressure,Press
+Compressor,Comp
+Tower,twr
+Room,Rm
+Charger,Chgr
+System,Sys
+Fault,Flt
+Warning,Warn
+Emergency,Emerg
+Shutdown,Shtdn
+Speed,Spd
