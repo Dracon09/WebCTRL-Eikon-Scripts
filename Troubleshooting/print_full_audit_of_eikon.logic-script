@@ -1,0 +1,39 @@
+// =============================================================
+// Comprehensive Logic Audit: Microblocks, Labels, & Text
+// =============================================================
+
+println "=== [ 1. MICROBLOCK AUDIT ] ==="
+logic.microblocks {
+    println "----------------------------------------------------"
+    println "MB: ${prop.'reference name' ?: 'No Refname'}"
+    println "Type: $type"
+    
+    propNames.each { pName ->
+        try {
+            def val = prop."$pName"
+            if (val != null && val != "") {
+                println "  ${pName.padRight(25)} : $val"
+            }
+        } catch (e) {
+            println "  ${pName.padRight(25)} : [Unreadable]"
+        }
+    }
+}
+
+println "\n=== [ 2. LABEL AUDIT ] ==="
+// Prints all labels with their exact grid coordinates
+logic.labels().each { label ->
+    println "Label: ${label.name.padRight(30)} @ [X: ${label.x}, Y: ${label.y}]"
+}
+
+println "\n=== [ 3. TEXT FIGURE AUDIT ] ==="
+// Prints all static text found on the logic page
+logic.figures {
+    if (getType() == 'text-figure') {
+        // Cleaning up the output in case of multi-line text
+        def cleanText = text.replaceAll('\n', ' ')
+        println "Text Figure: \"$cleanText\""
+    }
+}
+
+println "\n=== END OF AUDIT ==="
