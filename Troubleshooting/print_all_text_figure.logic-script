@@ -1,0 +1,5 @@
+logic.figures {
+    if (getType() == 'text-figure') {
+        println text
+    }
+}
