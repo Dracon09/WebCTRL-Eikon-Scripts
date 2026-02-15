@@ -1,8 +1,14 @@
 // =============================================================
 // Map a Modbus word to 16 Bits 
-// 
-// V6.4.6 - 02-12-2026
-// Tested on WC 10.0
+// V6.4.6 - 02-15-2026
+// - Script-relative paths (prefers <base>\extra or \extras)
+// - Regex-safe replacements (literal)
+// - JRE 8/9+ shortcut mask fallback
+// - Trend sample mode via boolean 'sample on COV'
+// - Alarm Category default to safe token (hvac_critical)
+// - TABS: "16bit" (default), "Alarm", and "Trend"
+// - UI: "Use Naming Rules" checkbox; "Ref Prefix" field under Symbol Reg#
+// - Tested on WC10
 // =============================================================
 
 def CONFIG = [
@@ -10,21 +16,21 @@ def CONFIG = [
     enableAlarms      : true,
     potentialSource   : true,             // [Potential alarm source]
     isCritical        : true,             // [Critical]
-    alarmCategory     : "hvac_critical",  // [Category] use approved tokens to avoid creating new ones
+    alarmCategory     : "hvac_critical",  // [Category] use approved tokens
     alarmEnabled      : 1,                // [Alarm Enable] (1 or 0 / true or false)
-    delaySeconds      : 0,                // [Delay Seconds] (optional if supported)
+    delaySeconds      : 0,                // [Delay Seconds]
     alarmText         : "\$source\$ is in alarm.",            // optional
     alarmAckRequired  : false,            // [Alarm requires acknowledge]
-    returnEnabled     : 0,                // [Return Enabled] (1 or 0 / true or false)
+    returnEnabled     : 0,                // [Return Enabled]
     returnText        : "\$source\$ has returned to normal.", // optional
     returnAckRequired : false,            // [Return requires acknowledge]
-    // template       : "Universal",      // If your event supports a 'template' property
+    // template       : "Universal",
 
     // --- TREND CONFIGURATION ---
     enableTrends      : true,
     enableLog         : true,             // [Enable Trend Log]
     sampleOnCOV       : true,             // [Sample on COV]
-    sampleInterval    : 300000,           // [Sample every] in ms (default 00:05:00 = 300,000ms)
+    sampleInterval    : 300000,           // [Sample every] ms
     maxSamples        : 100,              // [Max samples]
     enableHistorian   : true,             // [Enable Trend Historian]
     keepHistoryDays   : 0,                // [Keep historical trends for]
@@ -101,6 +107,12 @@ def resolveAsset = { String fileName ->
 def symbolFile = resolveAsset("modbus_word_to_16bit.logicsymbol")
 def csvFile    = resolveAsset("NamingRules.csv")
 
+// --- UI controls that other closures may reference (declare early) ---
+JTextField oldRegField = new JTextField("898989898", 10)
+JTextField newRegField = new JTextField("", 10)
+JTextField txtPrefix   = new JTextField("", 12)  // Ref Prefix field
+JCheckBox  chkUseRules = new JCheckBox("Use Naming Rules", true) // to right of Target Reg#
+
 // --- 2) HELPERS: names, regex-safe replaces, time conversion ---
 
 def makeRefSafe = { String s ->
@@ -108,7 +120,7 @@ def makeRefSafe = { String s ->
     s = s.toLowerCase()
          .replaceAll("[^a-z0-9]", "_")
          .replaceAll("_{2,}", "_")
-         .replaceAll("^_|_\$", "")
+         .replaceAll('^_|_$', '')     // single quotes to avoid $ interpolation
     if (s.matches("^\\d.*")) s = "_" + s
     return s 
 }
@@ -195,6 +207,16 @@ def eikonFormatRef = { str ->
     return makeRefSafe(s)
 }
 
+// Prefix getter (raw; applied before final sanitize)
+def getRefPrefix = { (txtPrefix?.getText() ?: "").trim() }
+
+// Gate to control whether CSV shortening is used; apply prefix; sanitize final
+def formatRefName = { str ->
+    String base = chkUseRules?.isSelected() ? eikonFormatRef(str) : makeRefSafe(str)
+    String pref = getRefPrefix()
+    return makeRefSafe(pref ? (pref + base) : base)
+}
+
 // --- 4) UI: table + fields ---
 
 class EikonCellRenderer extends DefaultTableCellRenderer {
@@ -265,22 +287,30 @@ table.addKeyListener(new KeyAdapter() {
     }
 })
 
+// Auto-fill Reference Name from Display Name
 model.addTableModelListener({ e ->
-    if (e.getType() == 0 && (e.getColumn() == 1)) {
+    if (e.getColumn() == 1) {
         int r = e.getFirstRow()
         Object val = model.getValueAt(r, 1)
-        if (val != null) SwingUtilities.invokeLater({ model.setValueAt(eikonFormatRef(val.toString()), r, 2) })
+        if (val != null) SwingUtilities.invokeLater({
+            model.setValueAt(formatRefName(val.toString()), r, 2)
+        })
     }
 } as javax.swing.event.TableModelListener)
 
-// Basic fields
-JTextField oldRegField = new JTextField("898989898", 10)
-JTextField newRegField = new JTextField("", 10)
+// Helper to re-apply ref names for all rows (used by toggle/prefix changes)
+def reapplyRefs = {
+    for (int i = 0; i < 16; i++) {
+        def dObj = model.getValueAt(i, 1)
+        String d = (dObj == null) ? "" : dObj.toString()
+        if (d) model.setValueAt(formatRefName(d), i, 2) else model.setValueAt("", i, 2)
+    }
+}
+
+// Basic status UI and frame reference
 JTextArea statusLabel = new JTextArea("", 4, 50)
 statusLabel.setEditable(false); statusLabel.setBackground(new Color(240, 240, 240))
-
-// Make the main frame visible to all closures / actions (assign later)
-def frame  // critical for dialogs if any
+def frame  // for dialogs if any
 
 // Compute "Assets Dir"
 def assetsDir = null
@@ -309,12 +339,12 @@ editCsvItem.addActionListener({
 
 reloadCsvItem.addActionListener({ 
     loadNamingRules()
-    for (int i=0; i<16; i++) { 
-        def dObj = model.getValueAt(i, 1)
-        String d = (dObj == null) ? "" : dObj.toString()
-        if (d) model.setValueAt(eikonFormatRef(d), i, 2) 
+    if (chkUseRules.isSelected()) {
+        reapplyRefs()
+        statusLabel.setText("Rules reloaded and applied (Use Naming Rules = ON).")
+    } else {
+        statusLabel.setText("Rules reloaded (Use Naming Rules = OFF).")
     }
-    statusLabel.setText("Rules reloaded.")
 } as ActionListener)
 
 editMenu.add(editCsvItem)
@@ -334,7 +364,6 @@ def DEFAULT_ALARM_CATEGORIES = [
     "general_alarm", "general_message", "unknown"
 ]
 
-// Pretty display for category tokens
 def prettify = { String t ->
     if (!t) return ""
     t.replace('_',' ').split(' ').collect { it.length()>0 ? it[0].toUpperCase()+it.substring(1) : it }.join(' ')
@@ -348,10 +377,37 @@ JPanel mappingPanel = new JPanel(new BorderLayout(5,5))
 mappingPanel.add(new JScrollPane(table), BorderLayout.CENTER)
 
 // Reg fields under the table (inside 16bit tab)
-JPanel regPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 6))
-regPanel.add(new JLabel("Symbol Reg#:")); regPanel.add(oldRegField)
-regPanel.add(new JLabel("Target Reg#:")); regPanel.add(newRegField)
+// Use GridBagLayout so we can place Ref Prefix under Symbol Reg#
+JPanel regPanel = new JPanel(new GridBagLayout())
+GridBagConstraints rbc = new GridBagConstraints()
+rbc.insets = new Insets(4,6,4,6); rbc.anchor = GridBagConstraints.WEST; rbc.fill = GridBagConstraints.HORIZONTAL
+rbc.weightx = 0
+
+// Row 0: Symbol Reg#, Target Reg#, Use Naming Rules
+rbc.gridx=0; rbc.gridy=0; regPanel.add(new JLabel("Symbol Reg#:"), rbc)
+rbc.gridx=1; rbc.gridy=0; rbc.weightx=0.2; regPanel.add(oldRegField, rbc)
+rbc.weightx=0
+
+rbc.gridx=2; rbc.gridy=0; regPanel.add(new JLabel("Target Reg#:"), rbc)
+rbc.gridx=3; rbc.gridy=0; rbc.weightx=0.2; regPanel.add(newRegField, rbc)
+rbc.weightx=0
+
+rbc.gridx=4; rbc.gridy=0; regPanel.add(chkUseRules, rbc)
+
+// Row 1: Ref Prefix (under Symbol Reg#)
+rbc.gridx=0; rbc.gridy=1; regPanel.add(new JLabel("Ref Prefix:"), rbc)
+rbc.gridx=1; rbc.gridy=1; rbc.gridwidth=3; rbc.weightx=1.0; regPanel.add(txtPrefix, rbc)
+// reset
+rbc.gridwidth=1; rbc.weightx=0
+
 mappingPanel.add(regPanel, BorderLayout.SOUTH)
+
+// When the Ref Prefix changes, re-apply table reference names
+txtPrefix.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+    void insertUpdate(javax.swing.event.DocumentEvent e) { reapplyRefs() }
+    void removeUpdate(javax.swing.event.DocumentEvent e) { reapplyRefs() }
+    void changedUpdate(javax.swing.event.DocumentEvent e) { reapplyRefs() }
+})
 
 // ----- Alarm Tab -----
 JPanel alarmPanel = new JPanel(new GridBagLayout())
@@ -438,6 +494,12 @@ tabs.addTab("16bit", mappingPanel)
 tabs.addTab("Alarm", new JScrollPane(alarmPanel))
 tabs.addTab("Trend", new JScrollPane(trendPanel))
 tabs.setSelectedIndex(0)
+
+// Re-apply Reference Names across table when the checkbox is toggled
+chkUseRules.addItemListener({ evt ->
+    reapplyRefs()
+    statusLabel.setText("Use Naming Rules: " + (chkUseRules.isSelected() ? "ON" : "OFF"))
+} as java.awt.event.ItemListener)
 
 // Helper: push tab fields -> CONFIG
 def applyTabsToConfig = {
@@ -551,7 +613,7 @@ okButton.addActionListener(new ActionListener() {
                 if (nm?.contains(oldR)) tracker.stage(it, replaceAllLiteral(nm, oldR, newR))
             }
 
-            // Update microblocks - global oldR->newR
+            // Update microblocks - global oldR->newR (includes description per Option 1)
             logic.microblocks {
                 if (propNames.contains('address')) {
                     def addr = prop.'address'
@@ -565,6 +627,13 @@ okButton.addActionListener(new ActionListener() {
                     def rn = prop.'reference name'
                     if (rn instanceof String && rn.toLowerCase().contains(oldR.toLowerCase())) {
                         prop.'reference name' = makeRefSafe(replaceAllLiteralIgnoreCase(rn, oldR, newR))
+                    }
+                }
+                // Global description replacement (Option 1)
+                if (propNames.contains('description')) {
+                    def ds = prop.'description'
+                    if (ds instanceof String && ds.contains(oldR)) {
+                        prop.'description' = replaceAllLiteral(ds, oldR, newR)
                     }
                 }
             }
@@ -648,7 +717,7 @@ okButton.addActionListener(new ActionListener() {
                                 prop.'inactive text' = CONFIG.inactiveText
                         }
 
-                        // Ensure suffix on reference name
+                        // Ensure suffix on reference name (Reference Name already includes any prefix)
                         String targetSuffix = (type == "bat" || type == "bdt") ? "_tnd" : (type == "event" ? "_alm" : "_bv")
                         if (propNames.contains('reference name')) {
                             String rb = rBase ?: ""
@@ -659,7 +728,7 @@ okButton.addActionListener(new ActionListener() {
                 }
             }
 
-            statusLabel.setText("Success: Register ${newR} updated.")
+            statusLabel.setText("Success: Register ${newR} updated. (Use Naming Rules: ${chkUseRules.isSelected() ? 'ON' : 'OFF'}, Prefix: '${getRefPrefix()}')")
         } catch (Exception ex) { 
             statusLabel.setText("Error: " + (ex?.message ?: ex?.toString()))
         }
