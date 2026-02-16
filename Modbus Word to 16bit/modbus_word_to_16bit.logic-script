@@ -1,14 +1,17 @@
 // =============================================================
 // Map a Modbus word to 16 Bits 
-// V6.4.6 - 02-15-2026
+// V6.4.10 - 02-15-2026
 // - Script-relative paths (prefers <base>\extra or \extras)
 // - Regex-safe replacements (literal)
 // - JRE 8/9+ shortcut mask fallback
-// - Trend sample mode via boolean 'sample on COV'
+// - Trend tab UI parity + Active/Inactive text
+// - FIX: 'sample every' uses centiseconds (property expects 1/100 s)
+// - FIX: 'use trend notification threshold' mapping for historian:
+//        TRUE == "Every N samples", FALSE == "Use default (45%)"
+// - ENFORCE: "Every" must be ≤ 50% of Max samples (GUI clamp, CONFIG clamp, final write clamp)
 // - Alarm Category default to safe token (hvac_critical)
 // - TABS: "16bit" (default), "Alarm", and "Trend"
 // - UI: "Use Naming Rules" checkbox; "Ref Prefix" field under Symbol Reg#
-// - Tested on WC10
 // =============================================================
 
 def CONFIG = [
@@ -120,7 +123,7 @@ def makeRefSafe = { String s ->
     s = s.toLowerCase()
          .replaceAll("[^a-z0-9]", "_")
          .replaceAll("_{2,}", "_")
-         .replaceAll('^_|_$', '')     // single quotes to avoid $ interpolation
+         .replaceAll('^_|_$', '')
     if (s.matches("^\\d.*")) s = "_" + s
     return s 
 }
@@ -183,7 +186,9 @@ class RenameTracker {
         pending.clear(); count = 0
     }
 }
+
 def tracker = new RenameTracker(this)
+
 def shortenMap = [:]
 
 def loadNamingRules = {
@@ -321,7 +326,7 @@ try {
 } catch (Throwable ignore) {}
 statusLabel.setText(
     "Ready\n" +
-    "V6.4.6 - Script-relative paths & hardening\n" +
+    "V6.4.10 - Trend 'sample every' fix; historian toggle mapping; 50% clamp; UI parity\n" +
     (assetsDir ? "Assets Dir: ${assetsDir?.absolutePath}\nSymbol: ${symbolFile?.name}\nRules CSV: ${csvFile?.name}"
                : "Symbol: ${symbolFile?.absolutePath}\nRules CSV: ${csvFile?.absolutePath}\nBase Dir: ${getBaseDir?.absolutePath}")
 )
@@ -352,7 +357,6 @@ editMenu.add(reloadCsvItem)
 menuBar.add(editMenu)
 
 // --- 6) TABS ---
-// Default WebCTRL 10.0 tokens — used in the Category dropdown
 def DEFAULT_ALARM_CATEGORIES = [
     "other",
     "accesscontrol_critical", "accesscontrol_general", "accesscontrol_maintenance",
@@ -377,7 +381,6 @@ JPanel mappingPanel = new JPanel(new BorderLayout(5,5))
 mappingPanel.add(new JScrollPane(table), BorderLayout.CENTER)
 
 // Reg fields under the table (inside 16bit tab)
-// Use GridBagLayout so we can place Ref Prefix under Symbol Reg#
 JPanel regPanel = new JPanel(new GridBagLayout())
 GridBagConstraints rbc = new GridBagConstraints()
 rbc.insets = new Insets(4,6,4,6); rbc.anchor = GridBagConstraints.WEST; rbc.fill = GridBagConstraints.HORIZONTAL
@@ -454,40 +457,194 @@ addA(chkReturnEn, 0,10)
 addA(new JLabel("Return text"), 0,11,0); addA(new JScrollPane(txtReturnText), 1,11,1)
 addA(chkReturnAckReq, 0,12)
 
-// ----- Trend Tab -----
+// ----- Trend Tab (Updated UI parity) -----
 JPanel trendPanel = new JPanel(new GridBagLayout())
 GridBagConstraints tgbc = new GridBagConstraints()
-tgbc.insets = new Insets(4,6,4,6); tgbc.anchor = GridBagConstraints.WEST; tgbc.fill = GridBagConstraints.HORIZONTAL
-tgbc.weightx = 0; tgbc.gridx = 0; tgbc.gridy = 0
+tgbc.insets = new Insets(4,6,4,6)
+tgbc.anchor = GridBagConstraints.WEST
+tgbc.fill   = GridBagConstraints.HORIZONTAL
+tgbc.weightx = 0
+tgbc.gridx = 0
+tgbc.gridy = 0
 
+// --- Ensure new CONFIG keys exist (backward-compatible) ---
+if (!CONFIG.containsKey('activeText'))   CONFIG.activeText   = "On"
+if (!CONFIG.containsKey('inactiveText')) CONFIG.inactiveText = "Off"
+
+// --- Controls ---
 JCheckBox chkEnableLog   = new JCheckBox("Enable Trend Log", CONFIG.enableLog)
-JRadioButton rbInterval  = new JRadioButton("Sample every (hh:mm:ss)")
+
+// Sampling mode
+JRadioButton rbInterval  = new JRadioButton("Sample every")
 JTextField  txtInterval  = new JTextField(msToHHMMSS(CONFIG.sampleInterval as long), 10)
+JLabel      lblHHMMSS    = new JLabel("(hh:mm:ss)")
+
 JRadioButton rbCOV       = new JRadioButton("Sample on COV (change of value)")
 ButtonGroup grpSample    = new ButtonGroup(); grpSample.add(rbInterval); grpSample.add(rbCOV)
 if (CONFIG.sampleOnCOV) rbCOV.setSelected(true) else rbInterval.setSelected(true)
-JTextField  txtMaxSamples = new JTextField(String.valueOf(CONFIG.maxSamples ?: 100), 6)
-JCheckBox chkEnableHist   = new JCheckBox("Enable Trend Historian", CONFIG.enableHistorian)
-JTextField txtKeepDays    = new JTextField(String.valueOf(CONFIG.keepHistoryDays ?: 0), 6)
-JRadioButton rbUseEvery   = new JRadioButton("Write to historian: Every")
-JTextField  txtEvery      = new JTextField(String.valueOf(CONFIG.writeEverySamples ?: 45), 6)
-JLabel      lblEveryTail  = new JLabel("trend samples (must be ≤ Max samples)")
-JRadioButton rbUseDefault = new JRadioButton("Use default (45% of Max samples)")
-ButtonGroup grpThresh     = new ButtonGroup(); grpThresh.add(rbUseEvery); grpThresh.add(rbUseDefault)
-if (CONFIG.useDefaultThresh) { rbUseDefault.setSelected(true) } else { rbUseEvery.setSelected(true) }
 
-def addT = { Component c, int x, int y, int wx=1 ->
-    tgbc.gridx=x; tgbc.gridy=y; tgbc.weightx=wx; trendPanel.add(c, tgbc)
+// Max samples + helper
+JTextField  txtMaxSamples = new JTextField(String.valueOf(CONFIG.maxSamples ?: 100), 6)
+JLabel      lblMaxHelp    = new JLabel("Allocate memory for this many trend samples in the controller.")
+
+// Historian
+JCheckBox   chkEnableHist = new JCheckBox("Enable Trend Historian", CONFIG.enableHistorian)
+JLabel      lblKeepDays   = new JLabel("Keep historical trends for")
+JTextField  txtKeepDays   = new JTextField(String.valueOf(CONFIG.keepHistoryDays ?: 0), 6)
+JLabel      lblKeepHelp   = new JLabel("days.  0 = use system settings default")
+
+// Threshold (write to historian)
+JLabel       lblWriteHdr  = new JLabel("Write to historian")
+JRadioButton rbUseEvery   = new JRadioButton("Every")
+JTextField   txtEvery      = new JTextField(String.valueOf(CONFIG.writeEverySamples ?: 45), 6)
+JLabel       lblEveryTail  = new JLabel("trend samples.  Must be 50% less than Max samples.")
+JRadioButton rbUseDefault = new JRadioButton("Use default (45% of Max samples)")
+ButtonGroup  grpThresh    = new ButtonGroup(); grpThresh.add(rbUseEvery); grpThresh.add(rbUseDefault)
+if (CONFIG.useDefaultThresh) rbUseDefault.setSelected(true) else rbUseEvery.setSelected(true)
+
+// Active/Inactive Text
+JLabel     lblActiveText   = new JLabel("Active Text")
+JTextField txtActiveText   = new JTextField(CONFIG.activeText ?: "On", 12)
+JLabel     lblInactiveText = new JLabel("Inactive Text")
+JTextField txtInactiveText = new JTextField(CONFIG.inactiveText ?: "Off", 12)
+
+// --- Layout (GridBag with right-hand helpers) ---
+def addT = { Component c, int x, int y, int wx=0, int gw=1 ->
+    tgbc.gridx=x; tgbc.gridy=y; tgbc.weightx=wx; tgbc.gridwidth=gw; trendPanel.add(c, tgbc)
+    tgbc.gridwidth = 1
 }
-addT(chkEnableLog, 0,0)
-addT(rbInterval, 0,1,0); addT(txtInterval, 1,1,0)
-addT(rbCOV, 0,2)
-addT(new JLabel("Max samples"), 0,3,0); addT(txtMaxSamples, 1,3,0)
-addT(chkEnableHist, 0,4)
-addT(new JLabel("Keep historical trends for (days)"), 0,5,0); addT(txtKeepDays, 1,5,0)
-addT(rbUseEvery, 0,6,0)
-addT(txtEvery, 1,6,0); addT(lblEveryTail, 2,6,1)
-addT(rbUseDefault, 0,7,0)
+
+// Row 0: Enable Trend Log
+addT(chkEnableLog, 0,0,1,3)
+
+// Row 1: Sample every [hh:mm:ss] (hh:mm:ss)
+addT(rbInterval, 0,1)
+addT(txtInterval, 1,1,0)
+addT(lblHHMMSS, 2,1)
+
+// Row 2: Sample on COV
+addT(rbCOV, 0,2,1,3)
+
+// Row 3: Max samples + help
+addT(new JLabel("Max samples"), 0,3)
+addT(txtMaxSamples, 1,3,0)
+addT(lblMaxHelp, 2,3)
+
+// Spacer
+addT(new JLabel(""), 0,4,1,3)
+
+// Row 5: Enable Trend Historian
+addT(chkEnableHist, 0,5,1,3)
+
+// Row 6: Keep historical trends for [days] + help
+addT(lblKeepDays, 0,6)
+addT(txtKeepDays, 1,6,0)
+addT(lblKeepHelp, 2,6)
+
+// Row 7: Write to historian (header label only)
+addT(lblWriteHdr, 0,7,1,3)
+
+// Row 8: Every [N] trend samples. Must be 50% less than Max samples.
+addT(rbUseEvery, 0,8)
+addT(txtEvery, 1,8,0)
+addT(lblEveryTail, 2,8)
+
+// Row 9: Use default (45% of Max samples)
+addT(rbUseDefault, 0,9,1,3)
+
+// Spacer
+addT(new JLabel(""), 0,10,1,3)
+
+// Row 11: Active Text
+addT(lblActiveText, 0,11)
+addT(txtActiveText, 1,11,1,2)
+
+// Row 12: Inactive Text
+addT(lblInactiveText, 0,12)
+addT(txtInactiveText, 1,12,1,2)
+
+// --- Enable/disable logic to mirror UI expectations ---
+def syncTrendControls = {
+    boolean logOn  = chkEnableLog.isSelected()
+    boolean histOn = chkEnableHist.isSelected()
+
+    // Log section
+    rbInterval.setEnabled(logOn)
+    rbCOV.setEnabled(logOn)
+    txtInterval.setEnabled(logOn && rbInterval.isSelected())
+    txtMaxSamples.setEnabled(logOn)
+    lblHHMMSS.setEnabled(logOn)
+    lblMaxHelp.setEnabled(logOn)
+
+    // Historian section
+    chkEnableHist.setEnabled(logOn)
+    lblKeepDays.setEnabled(logOn && histOn)
+    txtKeepDays.setEnabled(logOn && histOn)
+    lblKeepHelp.setEnabled(logOn && histOn)
+
+    lblWriteHdr.setEnabled(logOn && histOn)
+    rbUseEvery.setEnabled(logOn && histOn)
+    rbUseDefault.setEnabled(logOn && histOn)
+    txtEvery.setEnabled(logOn && histOn && rbUseEvery.isSelected())
+    lblEveryTail.setEnabled(logOn && histOn && rbUseEvery.isSelected())
+
+    // Active/Inactive text follow log state
+    lblActiveText.setEnabled(logOn)
+    txtActiveText.setEnabled(logOn)
+    lblInactiveText.setEnabled(logOn)
+    txtInactiveText.setEnabled(logOn)
+}
+chkEnableLog.addItemListener({ syncTrendControls() } as java.awt.event.ItemListener)
+chkEnableHist.addItemListener({ syncTrendControls() } as java.awt.event.ItemListener)
+rbInterval.addItemListener({ syncTrendControls() } as java.awt.event.ItemListener)
+rbCOV.addItemListener({ syncTrendControls() } as java.awt.event.ItemListener)
+rbUseEvery.addItemListener({ syncTrendControls() } as java.awt.event.ItemListener)
+rbUseDefault.addItemListener({ syncTrendControls() } as java.awt.event.ItemListener)
+
+// Light numeric guards (non-blocking)
+def numericOnly = { JTextField tf ->
+    tf.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+        void changedUpdate(javax.swing.event.DocumentEvent e) {}
+        void insertUpdate(javax.swing.event.DocumentEvent e) { fix() }
+        void removeUpdate(javax.swing.event.DocumentEvent e) { fix() }
+        private void fix() {
+            SwingUtilities.invokeLater({
+                String s = tf.getText()
+                if (s == null) return
+                String t = s.replaceAll("[^0-9-]", "")
+                if (!t.equals(s)) tf.setText(t)
+            })
+        }
+    })
+}
+numericOnly(txtMaxSamples)
+numericOnly(txtKeepDays)
+numericOnly(txtEvery)
+
+// --- Enforce 'Every' ≤ floor(0.5 * MaxSamples) in the GUI ---
+def clampEvery = {
+    try {
+        int max = Integer.parseInt(txtMaxSamples.getText().trim())
+        int limit = Math.max(0, (int)Math.floor(max * 0.5d))
+        int cur = Integer.parseInt(txtEvery.getText().trim())
+        if (cur > limit) txtEvery.setText(String.valueOf(limit))
+    } catch (Throwable ignore) {}
+}
+def addChangeListener = { JTextField tf, Closure onChange ->
+    tf.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+        void insertUpdate(javax.swing.event.DocumentEvent e) { onChange() }
+        void removeUpdate(javax.swing.event.DocumentEvent e) { onChange() }
+        void changedUpdate(javax.swing.event.DocumentEvent e) { onChange() }
+    })
+}
+addChangeListener(txtMaxSamples, { clampEvery() })
+addChangeListener(txtEvery,      { clampEvery() })
+txtEvery.setToolTipText("Must be \u2264 50% of Max samples.")
+lblEveryTail.setToolTipText("Controller requires 'Every' \u2264 50% of Max samples.")
+
+// Initial state
+syncTrendControls()
+clampEvery()
 
 // Add tabs (16bit first, default)
 tabs.addTab("16bit", mappingPanel)
@@ -515,15 +672,28 @@ def applyTabsToConfig = {
     CONFIG.returnText        = txtReturnText.getText()
     CONFIG.returnAckRequired = chkReturnAckReq.isSelected()
 
-    // Trend
-    CONFIG.enableLog       = chkEnableLog.isSelected()
-    CONFIG.sampleOnCOV     = rbCOV.isSelected()
-    CONFIG.sampleInterval  = hhmmssToMs(txtInterval.getText())
-    try { CONFIG.maxSamples = Integer.parseInt(txtMaxSamples.getText().trim()) } catch (Throwable ignore) { /* keep */ }
-    CONFIG.enableHistorian = chkEnableHist.isSelected()
+    // Trend (updated)
+    CONFIG.enableLog        = chkEnableLog.isSelected()
+    CONFIG.sampleOnCOV      = rbCOV.isSelected()
+    CONFIG.sampleInterval   = hhmmssToMs(txtInterval.getText())
+    try { CONFIG.maxSamples     = Integer.parseInt(txtMaxSamples.getText().trim()) } catch (Throwable ignore) { /* keep */ }
+    CONFIG.enableHistorian  = chkEnableHist.isSelected()
     try { CONFIG.keepHistoryDays = Integer.parseInt(txtKeepDays.getText().trim()) } catch (Throwable ignore) { /* keep */ }
+
     CONFIG.useDefaultThresh = rbUseDefault.isSelected()
     try { CONFIG.writeEverySamples = Integer.parseInt(txtEvery.getText().trim()) } catch (Throwable ignore) { /* keep */ }
+
+    // Defensive clamp in CONFIG
+    try {
+        int ms = (CONFIG.maxSamples ?: 0) as int
+        int limit = Math.max(0, (int)Math.floor(ms * 0.5d))
+        int we = (CONFIG.writeEverySamples ?: 0) as int
+        if (we > limit) CONFIG.writeEverySamples = limit
+    } catch (Throwable ignore) {}
+
+    // Active/Inactive text
+    CONFIG.activeText   = txtActiveText.getText()
+    CONFIG.inactiveText = txtInactiveText.getText()
 }
 
 // --- 7) BOTTOM CONTROLS (status + buttons) ---
@@ -549,7 +719,7 @@ mainPanel.add(tabs, BorderLayout.CENTER)
 mainPanel.add(bottomPanel, BorderLayout.SOUTH)
 
 // --- 9) FRAME ---
-def frameTitle = "Modbus Word to 16 bit Mapping V6.4.6"
+def frameTitle = "Modbus Word to 16 bit Mapping V6.4.10"
 frame = new JFrame(frameTitle)
 frame.setJMenuBar(menuBar)
 frame.setContentPane(mainPanel); frame.pack(); frame.setLocationRelativeTo(null); frame.setAlwaysOnTop(true)
@@ -694,27 +864,76 @@ okButton.addActionListener(new ActionListener() {
                                 try { prop.'sample on COV' = CONFIG.sampleOnCOV } catch (Throwable ignore) {}
                             }
                             if (!CONFIG.sampleOnCOV && propNames.contains('sample every')) {
-                                try { prop.'sample every' = (CONFIG.sampleInterval ?: 300000) } catch (Throwable ignore) {}
+                                // property expects centiseconds (1/100 s)
+                                long ms = (CONFIG.sampleInterval ?: 300000) as long
+                                long cs = Math.max(0L, Math.round(ms / 10.0d))  // ms -> centiseconds
+                                try { prop.'sample every' = cs } catch (Throwable ignore) {}
                             }
 
+                            // --------------------------
                             // Historian write threshold
-                            if (propNames.contains('use trend notification threshold')) {
-                                prop.'use trend notification threshold' = CONFIG.useDefaultThresh
-                            }
-                            if (!CONFIG.useDefaultThresh) {
-                                if (propNames.contains('write to historian every')) {
-                                    try { prop.'write to historian every' = CONFIG.writeEverySamples } catch (Throwable ignore) {}
-                                } else if (propNames.contains('write to historian')) {
-                                    try { prop.'write to historian' = CONFIG.writeEverySamples } catch (Throwable ignore) {}
-                                } else if (propNames.contains('trend notification threshold')) {
-                                    try { prop.'trend notification threshold' = CONFIG.writeEverySamples } catch (Throwable ignore) {}
+                            // --------------------------
+                            // Your environment: 'use trend notification threshold' == TRUE when "Every" is selected
+                            def useDefaultBoolNames = [
+                                'use trend notification threshold',       // TRUE == Every; FALSE == Use default
+                                'use default trend notification threshold',
+                                'use default threshold'
+                            ]
+                            def writeEveryNumNames = [
+                                'write to historian every',
+                                'write to historian',
+                                'trend notification threshold'
+                            ]
+
+                            def setBooleanCompat = { String key, boolean val ->
+                                try { prop."${key}" = val } catch (Throwable ex1) {
+                                    try { prop."${key}" = (val ? 1 : 0) } catch (Throwable ex2) {
+                                        try { prop."${key}" = "${val ? 1 : 0}" } catch (Throwable ex3) { /* ignore */ }
+                                    }
                                 }
+                            }
+                            def setIntCompat = { String key, int val ->
+                                try { prop."${key}" = val } catch (Throwable ex1) {
+                                    try { prop."${key}" = (val as Integer) } catch (Throwable ex2) {
+                                        try { prop."${key}" = "${val}" } catch (Throwable ex3) { /* ignore */ }
+                                    }
+                                }
+                            }
+
+                            def presentUseDefaultKeys = useDefaultBoolNames.findAll { propNames.contains(it) }
+                            def presentWriteEveryKeys = writeEveryNumNames.findAll { propNames.contains(it) }
+
+                            if (CONFIG.useDefaultThresh) {
+                                // GUI picked "Use default (45%)" -> FALSE on your system
+                                presentUseDefaultKeys.each { setBooleanCompat(it, false) }
+                                // numeric may remain; ignored by Eikon in default mode
+                            } else {
+                                // GUI picked "Every N samples" -> TRUE on your system
+                                presentUseDefaultKeys.each { setBooleanCompat(it, true) }
+
+                                // Final safety clamp at write time: Every ≤ floor(0.5 * MaxSamples)
+                                int _max = 0
+                                try { _max = (CONFIG.maxSamples ?: 0) as int } catch (Throwable ignore) {}
+                                int _limit = Math.max(0, (int)Math.floor(_max * 0.5d))
+                                int _every = 0
+                                try { _every = (CONFIG.writeEverySamples ?: 0) as int } catch (Throwable ignore) {}
+                                if (_every > _limit) _every = _limit
+
+                                presentWriteEveryKeys.each { setIntCompat(it, _every) }
                             }
 
                             if (CONFIG.containsKey('activeText') && propNames.contains('active text'))      
                                 prop.'active text' = CONFIG.activeText
                             if (CONFIG.containsKey('inactiveText') && propNames.contains('inactive text'))    
                                 prop.'inactive text' = CONFIG.inactiveText
+
+                            // (Optional) One-time debug to see exact props on this system:
+                            /*
+                            if (!this._dumpedTrendProps) {
+                                this._dumpedTrendProps = true
+                                statusLabel.setText((statusLabel.getText() ?: "") + "\nTrend props seen: " + propNames.toString())
+                            }
+                            */
                         }
 
                         // Ensure suffix on reference name (Reference Name already includes any prefix)
