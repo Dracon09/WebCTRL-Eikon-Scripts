@@ -1,4 +1,4 @@
-# --- EQUIPMENT & ZONES ---
+# --- EQUIPMENT & ZONES ---,
 Air Handling Unit,AHU
 Air Handler Unit,AHU
 Air Terminal Unit,ATU
@@ -48,8 +48,8 @@ Unit Heater,UH
 Unit Ventilator,UV
 Variable Refrigerant Flow,VRF
 Zone,ZN
-
-# --- SENSORS & MEASUREMENTS ---
+,
+# --- SENSORS & MEASUREMENTS ---,
 Amperage,AMP
 Apparent Power,VA
 Average,AVG
@@ -105,7 +105,7 @@ Total Volatile Organic Compound,TVOC
 Voltage,V
 Wet Bulb,WB
 Zone Temperature,ZNT
-
+,
 # --- COMMANDS, MODES & SETPOINTS ---
 Adjustable,ADJ
 Bypass,BYP
@@ -171,8 +171,8 @@ Variable Air Volume,VAV
 Warm-Up Mode,WUM
 Warm-Up Setpoint,WUS
 Writable,WR
-
-# --- PID GAINS & CONTROLLERS ---
+,
+# --- PID GAINS & CONTROLLERS ---,
 CFM I-Gain,IGC
 CFM P-Gain,PGC
 Heating Coil Controller,VR2
@@ -190,8 +190,8 @@ Supply Humidity I-Gain,IG7
 Supply Humidity P-Gain,PG7
 Supply Temperature I-Gain,IGT
 Supply Temperature P-Gain,PGT
-
-# --- COMPONENTS & FLUIDS ---
+,
+# --- COMPONENTS & FLUIDS ---,
 1st Stage DX Cooling,DX1
 1st Stage Gas Heating,GH1
 2nd Stage DX Cooling,DX2
@@ -238,8 +238,8 @@ Supply Air Damper,SAD
 Supply Fan,SAF
 Supply VFD,SVD
 Supply,SUP
-
-# --- SAFETY & ALARMS ---
+,
+# --- SAFETY & ALARMS ---,
 Alarm,ALM
 Critical,CRIT
 DX Cooling Stage,DXS
@@ -262,8 +262,144 @@ Proof,PRF
 Return Fan High Static,RSP
 Return Smoke Detector,RSD
 Supply Smoke Detector,SSD
-
-# --- Last Chance Cleanup ---
+,
+# --- ALC Built-in Rules ---,
+Airflow,flow
+Airflow Setpoint,flow_sp
+Boiler Hot Water Return Temp,blr_rtemp
+Boiler Hot Water Supply Temp,blr_stemp
+Boiler Stage,"blr_stg1,blr_stg2"
+Boiler Start/Stop,blr_enable
+Boiler Status,boiler_status
+Building Environmental Index,enviro_indx_tn
+Building Static Pressure,bldg_press
+CD Damper Position,cd_dmpr_pos
+Chilled Water Return Temperature,chwr_temp
+Chilled Water Supply Temperature,chws_temp
+Chilled Water Valve,chw_valve
+Chiller Start/Stop,chiller
+Chiller Status,chiller_status
+CHW Bypass Valve Output,chw_byp_vlv_output
+CHW Delta Pressure,chw_dp
+CHW Delta Water Pressure,delta_press
+CHW Flow,chw_flow
+CHW Isolation Valve,chw_iso_vlv
+CHW Pump S/S,chw_pump
+CHW Pump Status,chw_pump_status
+CHW Pump VFD Output,chwp_vfd_output
+CHWS Setpoint Reset Adjustment,chws_temp_reset
+Cold Deck Supply Air Temperature Setpoint,cd_setpt
+Cold Deck Temperature,cd_temp
+Compressor Stage Start/Stop,comp_ss
+Condenser Water Return Temperature,cwr_temp
+Condenser Water Supply Basin Temperature,ctwr_basin_temp
+Condenser Water Supply Temperature,cws_temp
+Cooling Stage,clg_stg
+Cooling Tower Bypass Valve,ct_bypass
+Cooling Tower Damper,damper
+Cooling Tower Fan High Speed,ct_fan_hi
+Cooling Tower Fan Low Speed,ct_fan_lo
+Cooling Tower Fan Start/Stop,ct_fan_ss
+Cooling Tower Fan VFD Output,ct_vfd_output
+Cooling Tower Spray Pump VFD,sprpmp_vfd
+Cooling Tower Spray Pump VFD Start/Stop,spr_pump
+Coolint Tower Vibration Shutdown Switch,vibr_switch
+CW Isolation Valve,cw_iso_vlv
+CW Pump Start/Stop,cw_pump_ss
+CW Pump Status,cw_pump_status
+Damper Position,dmpr_pos
+Delta Pressure,delta_press
+Discharge Air Temperature,da_temp
+Economizer,econ
+Evaporative Cooling Fan High Speed,ec_fan_hi
+Evaporative Cooling Fan Low Speed,ec_fan_lo
+Exhaust Air Damper,ea_damper
+Exhaust Air Damper Output,exh_dmpr_output
+Exhaust Fan High Speed,efan_hi
+Exhaust Fan Low Speed,efan_lo
+Exhaust Fan Medium Speed,efan_med
+Exhaust Fan Start/Stop,efan
+Exhaust Fan Status,ef_status
+Exhaust Fan VFD Speed,ef_vfd_output
+Face and Bypass,face_bypass
+Fan High Speed,fan_hi
+Fan Low Speed,fan_lo
+Fan Medium Speed,fan_med
+Fan Start/Stop,fan_run
+Fan Status,fan_status
+Filter Monitoring Status,filter_status
+Freezestat,freezestat
+HD Damper Position,hd_dmpr_pos
+Heat Recovery Wheel Bypass Dampers,htwl_byp_damp
+Heat Recovery Wheel Start/Stop,htwl
+Heat Recovery Wheel Supply Air Temperature,htwl_sa_temp
+Heat Recovery Wheel VFD,htwl_vfd
+Heating Stage,"htg_stg1,htg_stg2"
+High Static Pressure Switch,hi_static_sw
+Highest Zone CO2 Level,znco2_hi
+Hot Deck Supply Air Temperature Setpoint,hd_setpt
+Hot Deck Temperature,hd_temp
+Hot Water Mixing Valve,hwv
+Hot Water Return Temp,hwr_temp
+Hot Water Supply Temp,hws_temp
+Hot Water Valve,hw_valve
+Humidifier,humidifier
+Humidifier Enable,humdfr_enable
+HW Pump S/S,hw_pump
+HW Pump Status,hwp_status
+Mixed Air Damper,ma_damper
+Mixed Air Temperature,ma_temp
+Multizone Steam Valve,htg_stm_vlv
+OA Damper,oa_damper
+OA Fan S/S,oafan
+OA Temp,oat
+Outside Air Damper Endswitch,oad_endswitch
+Outside Air Enthalpy,oa_enth
+Outside Air Fan Status,oaf_status
+Outside Air Flow,oa_cfm
+Outside Air Temperature,oat_celsius_tn
+Perimeter Heating Stage,phtg_stg
+Preheating Stage,phtg_stg
+Preheating Valve,pht_valve
+Primary HWR Temp,pri_hwr_temp
+Primary HWS Temp,pri_hws_temp
+Pump Status,"p1_status,p2_status"
+Refrigerant Shutdown,refrig_shutdown
+Return Air CO2,ra_co2
+Return Air Humidity,ra_humidity
+Return Air Smoke Detector,smoke_detect_ra
+Return Air Temperature,ra_temp
+Return Air VOC,ra_voc
+Return Fan Start/Stop,rfan
+Return Fan Status,rf_status
+Reversing Valve,rev_valve
+Run-Around Loop Mixing Valve,er_valve
+Run-Around Loop Pump Start/Stop,er_pump_ss
+Run-Around Loop Pump Status,er_pump_status
+Secondary HWR Temp,sec_hwr_temp
+Secondary HWS Temp,sec_hws_temp
+Spray Pump Start/Stop,spr_pump
+Supply Air Humidity,sa_humidity
+Supply Air Smoke Detector,smoke_detect_sa
+Supply Air Temperature,sa_temp
+Supply Air Temperature Setpoint,sa_setpt
+Supply Fan Start/Stop,sfan
+Supply Fan Status,sf_status
+Supply Fan VFD Speed,sf_vfd_output
+Terminal Unit Fan Start/Stop,fan
+Total Flow,total_flow
+Unit Heat Fan Start/Stop,fan
+Unit Heat Steam Valve,stm_valve
+Zone CO2 Level,zone_co2
+Zone Damper,zone_damper
+Zone Relative Humidity,zone_rh
+Zone Temp,"zone_temp,ctrl"
+Zone Temperature,lstat
+Zone VOC Level,zone_voc
+,
+# --- Last Chance Cleanup ---,
+Outdoor Temperature,oa_temp
+Outdoor Humidity,oa_humd
 Temperature,Temp
 High,Hi
 Low,Lo
@@ -281,3 +417,22 @@ Warning,Warn
 Emergency,Emerg
 Shutdown,Shtdn
 Speed,Spd
+Power,pwr
+Switch,sw
+Discharge,disch
+Humidity,humd
+Remote,rem
+Valve,vlv
+Lockout,lck
+Water,h2o
+Smoke,smk
+Heater,htr
+Detection,det
+Enable,ena
+Solenoid,sol
+Output,out
+Custom,cust
+Liquid,liq
+Global,glb
+
+
