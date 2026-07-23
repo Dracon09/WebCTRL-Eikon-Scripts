@@ -1,0 +1,193 @@
+import javax.swing.*
+import java.awt.*
+
+// =============================================================
+// Comprehensive Logic Audit & Interrogator (V4 - Ultimate)
+// =============================================================
+
+// Dictionary derived from WebCTRL Microblock Reference
+def microblockDefinitions = [
+    'bai'   : 'BACnet Analog Input',
+    'bao'   : 'BACnet Analog Output',
+    'bavs'  : 'BACnet Analog Value - Status',
+    'bavp'  : 'BACnet Analog Value - Parameter',
+    'bbi'   : 'BACnet Binary Input',
+    'bbo'   : 'BACnet Binary Output',
+    'bbvs'  : 'BACnet Binary Value - Status',
+    'bbvp'  : 'BACnet Binary Value - Parameter',
+    'bmsvs' : 'BACnet Multi-State Value - Status',
+    'bmsvp' : 'BACnet Multi-State Value - Parameter',
+    'event' : 'BACnet Alarm',
+    'bdt'   : 'BACnet Binary Trend',
+    'bat'   : 'BACnet Analog Trend',
+    'text'  : 'Text Block',
+    'parb'  : 'Parameter (Boolean)',
+    'bspt'  : 'Zone Setpoint',
+    'rs'    : 'Room Sensor',
+    'rsf'   : 'Room Sensor Fan',
+    'rsh'   : 'Room Sensor Humidity',
+    'rsfh'  : 'Room Sensor Fan/Humidity',
+    'lstat' : 'LogiStat',
+    'flow'  : 'Airflow Control',
+    'baf'   : 'BACnet Airflow',
+    'bpta'  : 'Pulse to Analog',
+    'bfm'   : 'Floating Motor',
+    'bpwm'  : 'Pulse Width Output',
+    'ccnsw' : 'Carrier Schedule Write',
+    'ccnsch': 'Carrier Schedule',
+    'ccnbv' : 'Carrier Binary Value',
+    'ccnav' : 'Carrier Analog Value',
+    'gai'   : 'Global Analog Input',
+    'gbi'   : 'Global Binary Input'
+]
+
+def logOutput = new StringBuilder()
+def out = { text -> logOutput.append(text).append("\n") }
+
+out("Timestamp: " + new Date())
+out("======================================================")
+
+out("\n=== [ 1. GENERAL MICROBLOCK AUDIT ] ===")
+logic.microblocks {
+    out("----------------------------------------------------")
+    out("MB: ${prop.'reference name' ?: 'No Refname'}")
+    
+    // --- INTELLIGENT TYPE PARSING ---
+    def rawType = type.toLowerCase()
+    def cleanType = rawType.replace('m$', '').replaceAll('(x[1-9]|\\d|\\$sbyt|\\$sint|\\$ieee|\\$ynob|\\$onfb)$', '')
+    def friendlyName = microblockDefinitions[cleanType] ?: "Custom/Other"
+    
+    out("Type: $rawType ($friendlyName)")
+    
+    propNames.each { pName ->
+        try {
+            def val = prop."$pName"
+            if (val != null && val != "") {
+                out("  ${pName.padRight(25)} : $val")
+            }
+        } catch (e) {
+            out("  ${pName.padRight(25)} : [Unreadable]")
+        }
+    }
+}
+
+out("\n=== [ 2. LABEL AUDIT ] ===")
+logic.labels().each { label ->
+    out("Label: ${label.name.padRight(30)} @ [X: ${label.x}, Y: ${label.y}]")
+}
+
+out("\n=== [ 3. TEXT FIGURE AUDIT ] ===")
+logic.figures {
+    if (getType() == 'text-figure') {
+        def cleanText = text.replaceAll('\n', ' ')
+        out("Text Figure: \"$cleanText\"")
+    }
+}
+
+out("\n=== [ 4. ALARM & EVENT DEEP SCAN ] ===")
+logic.microblocks {
+    if (type == 'event') {
+        out("--- Checking Event Block: ${prop.'reference name'} ---")
+        out("Available Properties: " + propNames.join(", "))
+        
+        propNames.each { pName ->
+            def lowerName = pName.toLowerCase()
+            if (lowerName.contains("alarm") || lowerName.contains("return") || lowerName.contains("message")) {
+                try {
+                    out("   Found Property [${pName}]: ${prop."$pName"}")
+                } catch (e) {
+                    out("   Found Property [${pName}]: [Unreadable]")
+                }
+            }
+        }
+        out("------------------------------------------------")
+    }
+}
+
+out("\n=== [ 5. TREND BLOCK INTERROGATOR ] ===")
+int trendCount = 0
+logic.microblocks {
+    if (type == 'bdt' || type == 'bat') {
+        trendCount++
+        out("")
+        out("======================================================")
+        out("BLOCK TYPE: ${type}")
+        out("REF NAME  : ${prop.'reference name'}")
+        out("------------------------------------------------------")
+        
+        propNames.each { pName ->
+            try {
+                def val = prop."${pName}"
+                out("${pName.padRight(30)} : ${val}")
+            } catch (e) {
+                out("${pName.padRight(30)} : [Error Reading Property]")
+            }
+        }
+        out("======================================================")
+    }
+}
+if (trendCount == 0) {
+    out("No Trend blocks (BDT or BAT) found in the current logic.")
+}
+
+out("\n=== [ 6. ALARM CATEGORY SUMMARY ] ===")
+def eventRows = []
+def categoryCounts = [:].withDefault { 0 }
+def categories = new LinkedHashSet()
+
+logic.microblocks {
+    try {
+        if (type?.toString()?.toLowerCase() == 'event') {
+            def rn = propNames?.contains('reference name') ? prop.'reference name' : null
+            def dn = propNames?.contains('display name') ? prop.'display name' : null
+            def cat = propNames?.contains('category') ? prop.'category' : null
+
+            rn = rn?.toString() ?: ""
+            dn = dn?.toString() ?: ""
+            cat = cat?.toString() ?: "(none)"
+
+            eventRows << [rn, dn, cat]
+            categories.add(cat)
+            categoryCounts[cat] = categoryCounts[cat] + 1
+        }
+    } catch (Throwable blockEx) {
+        // Ignore individual block errors
+    }
+}
+
+out(String.format("%-40s %-40s %-30s", "Reference Name", "Display Name", "Category"))
+out("-" * 110)
+eventRows.each { r ->
+    out(String.format("%-40.40s %-40.40s %-30.30s", r[0], r[1], r[2]))
+}
+if (eventRows.isEmpty()) {
+    out("(No event microblocks found.)")
+} else {
+    out("\nUnique Categories Found (${categories.size()}):")
+    categoryCounts.keySet().sort().each { k ->
+        out(String.format("  %-30s : %d block(s)", k, categoryCounts[k]))
+    }
+}
+
+out("\n=== END OF AUDIT ===")
+
+// --- Display Results in a Swing Window ---
+SwingUtilities.invokeLater({
+    JFrame frame = new JFrame("Eikon Logic Interrogator & Audit (V4)")
+    frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE)
+    
+    JTextArea textArea = new JTextArea(logOutput.toString())
+    textArea.setFont(new Font("Monospaced", Font.PLAIN, 12))
+    textArea.setEditable(false)
+    textArea.setMargin(new Insets(10, 10, 10, 10))
+    
+    JScrollPane scrollPane = new JScrollPane(textArea)
+    // Widened the window slightly to 1000px so the new Category table doesn't wrap
+    scrollPane.setPreferredSize(new Dimension(1000, 750))
+    
+    frame.add(scrollPane)
+    frame.pack()
+    frame.setLocationRelativeTo(null)
+    frame.setAlwaysOnTop(true)
+    frame.setVisible(true)
+})
