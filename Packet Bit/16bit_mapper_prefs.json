@@ -1,0 +1,30 @@
+{
+    "networkPath": "mtcpip://uint/400010/1/xxx.xxx.xxx.xxx",
+    "refPrefix": "gen1_",
+    "useNamingRules": true,
+    "symbolPath": "C:\\WebCTRL10.0\\extras\\modbus_word_to_16bit_no_purple.logicsymbol",
+    "config": {
+        "enableAlarms": true,
+        "potentialSource": true,
+        "isCritical": false,
+        "alarmCategory": "hvac_critical",
+        "alarmEnabled": 0,
+        "delaySeconds": 0,
+        "alarmText": "$source$ is in an alarm state of $new_state$.",
+        "alarmAckRequired": false,
+        "returnEnabled": 0,
+        "returnText": "$source$ has returned to a normal state of $new_state$.",
+        "returnAckRequired": false,
+        "enableTrends": true,
+        "enableLog": true,
+        "sampleOnCOV": true,
+        "sampleInterval": 300000,
+        "maxSamples": 100,
+        "enableHistorian": true,
+        "keepHistoryDays": 0,
+        "useDefaultThresh": true,
+        "writeEverySamples": 45,
+        "activeText": "On",
+        "inactiveText": "Off"
+    }
+}
