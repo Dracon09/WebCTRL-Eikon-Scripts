@@ -1,15 +1,20 @@
 // =============================================================
 // Map a Modbus word to 16 Bits 
-// V6.4.18 - Config Tab + Logicsymbol Preview Extractor
+// V6.4.19 - Duplicate Reference Name Highlighting
 // - Script-relative paths (prefers <base>\extra or \extras)
 // - Regex-safe replacements (literal)
+// - JRE 8/9+ shortcut mask fallback
 // - Trend tab UI parity + Active/Inactive text
 // - FIX: 'sample every' uses centiseconds (property expects 1/100 s)
-// - ENFORCE: "Every" must be <= 50% of Max samples
+// - FIX: 'use trend notification threshold' mapping for historian:
+//        TRUE == "Every N samples", FALSE == "Use default (45%)"
+// - ENFORCE: "Every" must be <= 50% of Max samples (GUI clamp, CONFIG clamp, final write clamp)
+// - Alarm Category default to safe token (hvac_critical)
 // - TABS: "16bit" (default), "Alarm", "Trend", and "Config"
 // - UI: Replaced Symbol/Target Reg with single Network Path field + Clickable Examples
 // - NEW: Saves UI state to 16bit_mapper_prefs.json and reloads on startup
 // - NEW: Config tab to browse for .logicsymbol and extract/display preview.png
+// - NEW: Table highlights duplicate Reference Names in Orange
 // =============================================================
 
 def CONFIG = [
@@ -251,11 +256,35 @@ class EikonCellRenderer extends DefaultTableCellRenderer {
         String text = value ? value.toString() : ""
         c.setBackground(isSelected ? table.getSelectionBackground() : Color.WHITE)
         c.setForeground(isSelected ? table.getSelectionForeground() : Color.BLACK)
+        c.setToolTipText(null) // Reset tooltip on redraw
+
         if (col == 1 && text.length() > 40) {
             c.setForeground(Color.RED); c.setFont(c.getFont().deriveFont(Font.BOLD))
+            c.setToolTipText("Exceeds 40 characters")
         } else if (col == 2) {
-            if (text.length() > 40) c.setBackground(new Color(255, 100, 100))
-            else if (text.length() > 36) c.setBackground(new Color(255, 255, 150))
+            // -- Duplicate Checking --
+            boolean isDuplicate = false
+            if (text.trim().length() > 0) {
+                int matchCount = 0
+                for (int r = 0; r < table.getRowCount(); r++) {
+                    def otherVal = table.getValueAt(r, 2)
+                    if (otherVal != null && otherVal.toString().trim() == text.trim()) {
+                        matchCount++
+                    }
+                }
+                isDuplicate = (matchCount > 1)
+            }
+
+            if (isDuplicate) {
+                c.setBackground(new Color(255, 165, 0)) // Orange warning background
+                c.setToolTipText("Duplicate Reference Name!")
+            } else if (text.length() > 40) {
+                c.setBackground(new Color(255, 100, 100))
+                c.setToolTipText("Exceeds 40 characters")
+            } else if (text.length() > 36) {
+                c.setBackground(new Color(255, 255, 150))
+                c.setToolTipText("Approaching 40 character limit")
+            }
         }
         return c
     }
@@ -312,24 +341,30 @@ table.addKeyListener(new KeyAdapter() {
     }
 })
 
+// Auto-fill Reference Name from Display Name
 model.addTableModelListener({ e ->
     if (e.getColumn() == 1) {
         int r = e.getFirstRow()
         Object val = model.getValueAt(r, 1)
+                                    
         if (val != null) SwingUtilities.invokeLater({
             model.setValueAt(formatRefName(val.toString()), r, 2)
+            table.repaint() // Trigger full repaint so duplicates catch dynamically
         })
     }
 } as javax.swing.event.TableModelListener)
 
+// Helper to re-apply ref names for all rows (used by toggle/prefix changes)
 def reapplyRefs = {
     for (int i = 0; i < 16; i++) {
         def dObj = model.getValueAt(i, 1)
         String d = (dObj == null) ? "" : dObj.toString()
         if (d) model.setValueAt(formatRefName(d), i, 2) else model.setValueAt("", i, 2)
     }
+    table.repaint() // Trigger redraw for duplicate detection
 }
 
+// Basic status UI and frame reference
 JTextArea statusLabel = new JTextArea("", 4, 50)
 statusLabel.setEditable(false); statusLabel.setBackground(new Color(240, 240, 240))
 def frame  
@@ -342,7 +377,7 @@ try {
 } catch (Throwable ignore) {}
 statusLabel.setText(
     "Ready\n" +
-    "V6.4.18 - Config Tab + Logicsymbol Preview Extractor\n" +
+    "V6.4.19 - Duplicate Reference Name Highlighting\n" +
     (assetsDir ? "Assets Dir: ${assetsDir?.absolutePath}\nRules CSV: ${csvFile?.name}"
                : "Rules CSV: ${csvFile?.absolutePath}\nBase Dir: ${getBaseDir?.absolutePath}")
 )
@@ -719,7 +754,7 @@ mainPanel.add(tabs, BorderLayout.CENTER)
 mainPanel.add(bottomPanel, BorderLayout.SOUTH)
 
 // --- 9) FRAME ---
-def frameTitle = "Modbus Word to 16 bit Mapping V6.4.18"
+def frameTitle = "Modbus Word to 16 bit Mapping V6.4.19"
 frame = new JFrame(frameTitle)
 frame.setJMenuBar(menuBar)
 frame.setContentPane(mainPanel); frame.pack(); frame.setLocationRelativeTo(null); frame.setAlwaysOnTop(true)
