@@ -1,0 +1,690 @@
+// =============================================================
+// BACnet MSV Mapping (GUI Edition)
+// V3.3.0 - Pre-Scan Isolation & Reference Name UI
+// - STABLE: Strict code preservation (Step 1 & Step 2 blocks intact)
+// - FIX: Added Pre-Scan step to isolate global counters (math starts fresh on multiple drops)
+// - UI: Replaced Object ID with single Network Path field + Clickable Examples
+// - UI: Replaced 'Object_Name' with 'Display Name' and dynamic 'Reference Name' field
+// - UI: Added top Menu Bar to open and reload NamingRules.csv directly
+// - UI: Added 'Len' column to track string length in real-time
+// - ENFORCE: Highlights cells red if length > 20 (truncates only on execution)
+// - FIX: Removed custom keyboard trap to restore native multi-cell copy/paste
+// - NEW: Zero-width space (\u200B) padding for stacked MSVs to prevent text cascading
+// - MATH: Auto-scales subtraction blocks (-18.0, -36.0) for 19-state chunks
+// - LABELS: Dynamically renames MSV text-figures (MSV1 1-19, MSV2 20-37, etc.)
+// - FIX: Prevents protocol string doubling (bacnet://...) during text-figure replacement
+// =============================================================
+
+import javax.swing.*
+import javax.swing.table.*
+import java.awt.*
+import java.awt.event.*
+import java.awt.datatransfer.*
+import java.net.URLDecoder
+import java.util.regex.Pattern
+import java.util.regex.Matcher
+
+// ==========================================
+// FILE & PATH RESOLUTION
+// ==========================================
+def getBaseDir = {
+    try {
+        def url = getClass().protectionDomain?.codeSource?.location
+        if (url != null) {
+            def p = URLDecoder.decode(url.path, "UTF-8")
+            File loc = new File(p)
+            if (loc.isFile()) return loc.parentFile
+            if (loc.isDirectory()) return loc
+        }
+    } catch (Throwable ignore) {}
+    try {
+        def wd = System.getProperty("user.dir")
+        if (wd) {
+            File f = new File(wd)
+            if (f.exists()) return f
+        }
+    } catch (Throwable ignore) {}
+    return new File(".").canonicalFile
+}()
+
+def candidateDirs = {
+    def list = []
+    def base = getBaseDir
+    def parent = base?.parentFile
+    list << base
+    list << new File(base, "extra")
+    list << new File(base, "extras")
+    if (parent != null) {
+        list << parent
+        list << new File(parent, "extra")
+        list << new File(parent, "extras")
+    }
+    try {
+        def wd = System.getProperty("user.dir", ".")
+        list << new File(wd)
+    } catch (Throwable ignore) {}
+    list << new File(".")
+    return list.findAll { it != null }
+               .collect { it.canonicalFile }
+               .unique()
+}()
+
+def resolveAsset = { String fileName ->
+    for (File dir : candidateDirs) {
+        File f = new File(dir, fileName)
+        if (f.exists()) return f
+    }
+    File preferred = new File(getBaseDir, "extra")
+    if (!preferred.exists()) preferred = new File(getBaseDir, "extras")
+    if (!preferred.exists()) preferred = getBaseDir
+    return new File(preferred, fileName)
+}
+
+// Logic Symbol Assets for BACnet
+def symbolBase   = resolveAsset("bacnet_1_to_msv.logicsymbol")
+def symbol1_20   = resolveAsset("bacnet_1_to_20_msv.logicsymbol")
+def symbolOver20 = resolveAsset("bacnet_1_to_over_20_msv.logicsymbol")
+def csvFile      = resolveAsset("NamingRules.csv")
+
+// ==========================================
+// UI CONTROLS & HELPERS
+// ==========================================
+JTextField txtDisplayName   = new JTextField("A1_Point", 15)
+JTextField txtReferenceName = new JTextField("a1_point", 15)
+JTextField txtNetworkPath   = new JTextField("MSV:147", 10)
+JCheckBox  chkUseRules      = new JCheckBox("Use Naming Rules", true)
+
+def makeRefSafe = { String s ->
+    if (!s) return ""
+    s = s.toLowerCase()
+         .replaceAll(/[^a-z0-9]/, '_')
+         .replaceAll(/__+/, '_')
+         .replaceAll(/^_|_$/, '')
+    if (s.matches("^\\d.*")) s = "_" + s
+    return s 
+}
+
+def shortenMap = [:]
+def loadNamingRules = {
+    shortenMap.clear()
+    if (csvFile.exists()) {
+        csvFile.eachLine { line ->
+            if (!line?.trim() || line.startsWith("#")) return
+            def p = line.split(',')
+            if (p.size() == 2) shortenMap.put(p[0].trim(), p[1].trim())
+        }
+    }
+}
+loadNamingRules()
+
+// Applies CSV rules (leaves >20 chars intact to trigger UI highlighting)
+def eikonFormatStateText = { String str ->
+    if (!str) return ""
+    def s = str
+    if (chkUseRules.isSelected()) {
+        shortenMap.each { k, v ->
+            s = s.replaceAll("(?i)\\b" + Pattern.quote(k) + "\\b", Matcher.quoteReplacement(v))
+        }
+    }
+    return s.trim()
+}
+
+// Dynamic Reference Name Updater
+def updateRefField = {
+    SwingUtilities.invokeLater({
+        def base = txtDisplayName.getText()
+        if (chkUseRules.isSelected()) {
+            shortenMap.each { k, v ->
+                base = base.replaceAll("(?i)\\b" + Pattern.quote(k) + "\\b", Matcher.quoteReplacement(v))
+            }
+        }
+        txtReferenceName.setText(makeRefSafe(base))
+    })
+}
+
+txtDisplayName.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+    void insertUpdate(javax.swing.event.DocumentEvent e) { updateRefField() }
+    void removeUpdate(javax.swing.event.DocumentEvent e) { updateRefField() }
+    void changedUpdate(javax.swing.event.DocumentEvent e) { updateRefField() }
+})
+
+// ==========================================
+// GUI TABLE SETUP
+// ==========================================
+class EikonCellRenderer extends DefaultTableCellRenderer {
+    @Override
+    Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int col) {
+        Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, col)
+        c.setBackground(isSelected ? table.getSelectionBackground() : Color.WHITE)
+        c.setForeground(isSelected ? table.getSelectionForeground() : Color.BLACK)
+        
+        // Highlight BACnet text and length column if over 20 chars
+        if (col == 2 && value?.toString()?.length() > 20) {
+            c.setBackground(new Color(255, 100, 100))
+        }
+        if (col == 3 && value != null && value.toString().length() > 0) {
+            try {
+                if (Integer.parseInt(value.toString()) > 20) {
+                    c.setBackground(new Color(255, 100, 100))
+                }
+            } catch (Exception ex) {}
+        }
+        return c
+    }
+}
+
+int MAX_STATES = 1000
+def columnNames = ["Value", "Raw State Text", "BACnet Text", "Len"]
+// Initialize table with values 1 through 1000
+def data = (1..MAX_STATES).collect { [it.toString(), "", "", ""] } as Object[][]
+DefaultTableModel model = new DefaultTableModel(data, columnNames as Object[]) { 
+    @Override boolean isCellEditable(int r, int c) { return c != 0 && c != 3 } 
+}
+JTable table = new JTable(model)
+table.setDefaultRenderer(Object.class, new EikonCellRenderer())
+table.setRowHeight(22)
+table.getColumnModel().getColumn(0).setMaxWidth(50)
+table.getColumnModel().getColumn(3).setMaxWidth(40)
+table.setCellSelectionEnabled(true)
+
+// COPY/PASTE HANDLER (Native copy preserved)
+table.addKeyListener(new KeyAdapter() {
+    @Override
+    void keyPressed(KeyEvent e) {
+        int mask
+        try { mask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() }
+        catch (Throwable t) { try { mask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMask() } catch (Throwable t2) { mask = java.awt.event.InputEvent.CTRL_DOWN_MASK } }
+        
+        if ((e.getModifiersEx() & mask) != 0 && e.getKeyCode() == KeyEvent.VK_V) {
+            int rStart = table.getSelectedRow() == -1 ? 0 : table.getSelectedRow()
+            int cStart = table.getSelectedColumn() == -1 ? 1 : table.getSelectedColumn()
+            try {
+                String cb = (String) Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null).getTransferData(DataFlavor.stringFlavor)
+                cb.split("\\r?\\n").eachWithIndex { line, i ->
+                    if (!line?.trim()) return
+                    if ((rStart + i) < MAX_STATES) {
+                        String[] cells = line.split("\t")
+                        cells.eachWithIndex { val, j ->
+                            if ((cStart + j) == 1 || (cStart + j) == 2) {
+                                model.setValueAt((val == null) ? "" : val.trim(), rStart + i, cStart + j)
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ex) { /* ignore */ }
+            e.consume()
+        }
+    }
+})
+
+// Auto-fill BACnet Text & Length from Raw State Text
+model.addTableModelListener({ e ->
+    int c = e.getColumn()
+    if (c == 1 || c == 2) {
+        int r = e.getFirstRow()
+        Object val = model.getValueAt(r, c)
+        SwingUtilities.invokeLater({
+            if (c == 1) {
+                String formatted = eikonFormatStateText(val?.toString())
+                model.setValueAt(formatted, r, 2)
+            } else if (c == 2) {
+                int len = val ? val.toString().length() : 0
+                model.setValueAt(len > 0 ? len.toString() : "", r, 3)
+            }
+        })
+    }
+} as javax.swing.event.TableModelListener)
+
+// Reapply rules to all rows when toggled
+def reapplyRules = {
+    for (int i = 0; i < MAX_STATES; i++) {
+        def rObj = model.getValueAt(i, 1)
+        if (rObj) {
+            model.setValueAt(eikonFormatStateText(rObj.toString()), i, 2)
+        }
+    }
+}
+
+chkUseRules.addItemListener({ evt -> 
+    reapplyRules() 
+    updateRefField()
+} as java.awt.event.ItemListener)
+
+// ==========================================
+// GUI LAYOUT & MENUS
+// ==========================================
+JTextArea statusLabel = new JTextArea("Ready\nAssets Dir: " + getBaseDir?.absolutePath, 4, 50)
+statusLabel.setEditable(false); statusLabel.setBackground(new Color(240, 240, 240))
+
+// MENU SETUP
+JMenuBar menuBar = new JMenuBar()
+JMenu editMenu = new JMenu("Edit")
+JMenuItem editCsvItem = new JMenuItem("Edit Naming Rules...")
+JMenuItem reloadCsvItem = new JMenuItem("Reload Naming Rules")
+
+editCsvItem.addActionListener({ 
+    if (csvFile.exists()) Desktop.getDesktop().edit(csvFile)
+    else JOptionPane.showMessageDialog(null, "File not found: " + csvFile.absolutePath)
+} as ActionListener)
+
+reloadCsvItem.addActionListener({ 
+    loadNamingRules()
+    if (chkUseRules.isSelected()) {
+        reapplyRules()
+        updateRefField()
+        statusLabel.setText("Rules reloaded and applied (Use Naming Rules = ON).")
+    } else {
+        statusLabel.setText("Rules reloaded (Use Naming Rules = OFF).")
+    }
+} as ActionListener)
+
+editMenu.add(editCsvItem)
+editMenu.add(reloadCsvItem)
+menuBar.add(editMenu)
+
+// MAIN TABS
+JTabbedPane tabs = new JTabbedPane()
+JPanel msvPanel = new JPanel(new BorderLayout(5,5))
+msvPanel.add(new JScrollPane(table), BorderLayout.CENTER)
+
+JPanel regPanel = new JPanel(new GridBagLayout())
+GridBagConstraints rbc = new GridBagConstraints()
+rbc.insets = new Insets(4,6,4,6); rbc.anchor = GridBagConstraints.WEST; rbc.fill = GridBagConstraints.HORIZONTAL
+
+rbc.gridx=0; rbc.gridy=0; regPanel.add(new JLabel("Display Name:"), rbc)
+rbc.gridx=1; rbc.gridy=0; rbc.weightx=0.2; regPanel.add(txtDisplayName, rbc)
+rbc.weightx=0
+
+rbc.gridx=2; rbc.gridy=0; regPanel.add(new JLabel("Reference Name:"), rbc)
+rbc.gridx=3; rbc.gridy=0; rbc.weightx=0.2; regPanel.add(txtReferenceName, rbc)
+rbc.weightx=0
+
+rbc.gridx=0; rbc.gridy=1; regPanel.add(new JLabel("Network Path:"), rbc)
+rbc.gridx=1; rbc.gridy=1; rbc.weightx=0.2; regPanel.add(txtNetworkPath, rbc)
+rbc.weightx=0
+
+rbc.gridx=3; rbc.gridy=1; regPanel.add(chkUseRules, rbc)
+
+def createExampleBtn = { String text ->
+    JLabel lbl = new JLabel("<html><a href='#'>" + text + "</a></html>")
+    lbl.setCursor(new Cursor(Cursor.HAND_CURSOR))
+    lbl.setToolTipText("Click to use this example")
+    lbl.addMouseListener(new MouseAdapter() {
+        void mouseClicked(MouseEvent e) { txtNetworkPath.setText(text) }
+    })
+    return lbl
+}
+
+// Added Clickable Examples under Network Path
+rbc.gridwidth=2
+rbc.gridx=1; rbc.gridy=2; regPanel.add(createExampleBtn("mtcpip://uint/400010/1/xxx.xxx.xxx.xxx"), rbc)
+rbc.gridx=1; rbc.gridy=3; regPanel.add(createExampleBtn("modbus://uint/400010/DEVICE"), rbc)
+rbc.gridx=1; rbc.gridy=4; regPanel.add(createExampleBtn("bacnet://999999999/MSV:147"), rbc)
+rbc.gridx=1; rbc.gridy=5; regPanel.add(createExampleBtn("bacnet://999999999/MSI:147"), rbc)
+rbc.gridwidth=1
+
+msvPanel.add(regPanel, BorderLayout.SOUTH)
+tabs.addTab("MSV", msvPanel)
+
+JButton okButton = new JButton("OK")
+JButton fixOCRButton = new JButton("Fix OCR")
+JButton clearButton = new JButton("Clear Labels")
+JButton cancelButton = new JButton("Close")
+
+JPanel buttonPanel = new JPanel()
+buttonPanel.add(okButton); buttonPanel.add(fixOCRButton); 
+buttonPanel.add(clearButton); buttonPanel.add(cancelButton)
+
+JPanel bottomPanel = new JPanel(); 
+bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.Y_AXIS))
+bottomPanel.add(new JScrollPane(statusLabel))
+bottomPanel.add(buttonPanel)
+
+JPanel mainPanel = new JPanel(new BorderLayout(5, 5)); 
+mainPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10))
+mainPanel.add(tabs, BorderLayout.CENTER)
+mainPanel.add(bottomPanel, BorderLayout.SOUTH)
+
+def frame = new JFrame("BACnet MSV Mapping V3.3.0")
+frame.setJMenuBar(menuBar)
+frame.setContentPane(mainPanel); frame.setPreferredSize(new Dimension(800, 600))
+frame.pack(); frame.setLocationRelativeTo(null); frame.setAlwaysOnTop(true); frame.setVisible(true)
+
+// Button Actions
+fixOCRButton.addActionListener({ 
+    for (int i = 0; i < MAX_STATES; i++) { 
+        def obj = model.getValueAt(i, 1)
+        if (obj) model.setValueAt(obj.toString().replaceAll("(?<=[a-z0-9])(?=[A-Z])", " ").trim(), i, 1) 
+    }
+} as ActionListener)
+
+clearButton.addActionListener({ 
+    for (int i = 0; i < MAX_STATES; i++) { 
+        model.setValueAt("", i, 1); 
+        model.setValueAt("", i, 2); 
+        model.setValueAt("", i, 3) 
+    } 
+} as ActionListener)
+
+cancelButton.addActionListener({ frame.dispose() } as ActionListener)
+
+
+// ==========================================
+// THE MAIN EXECUTION LOGIC (V3.3.0 Core)
+// ==========================================
+okButton.addActionListener(new ActionListener() {
+    public void actionPerformed(ActionEvent eventObj) {
+        try {
+            // Extract the formatted BACnet states from the table
+            def allStates = []
+            for (int i = 0; i < MAX_STATES; i++) {
+                String bacnetText = model.getValueAt(i, 2)?.toString()?.trim()
+                if (bacnetText) {
+                    // Enforce the 20-character limit right before pushing to Eikon
+                    if (bacnetText.length() > 20) {
+                        bacnetText = bacnetText.substring(0, 20)
+                    }
+                    allStates << bacnetText
+                }
+            }
+
+            if (allStates.isEmpty()) {
+                statusLabel.setText("Error: No states defined in table.")
+                return
+            }
+
+            // ==========================================
+            // STEP 0: Pre-Scan Existing Blocks for Isolation
+            // ==========================================
+            // We count everything currently on the page BEFORE we append symbols
+            // This guarantees subsequent drops don't interfere with old logic
+            int existingMicroblockCount = 0
+            logic.microblocks { existingMicroblockCount++ }
+            
+            int existingLabelCount = 0
+            for (def l : logic.labels()) { existingLabelCount++ }
+            
+            int existingFigureCount = 0
+            logic.figures { if (getType().equals('text-figure')) existingFigureCount++ }
+
+            // ==========================================
+            // STEP 1: Dynamic Append
+            // ==========================================
+            String zeroWidthSpace = "\u200B"
+            
+            def stateChunks = []
+            if (allStates.size() <= 20) {
+                // Under 20 states: No padding required, load normally
+                stateChunks.add(allStates.collect { it })
+            } else {
+                // MSV 1: First 19 states + Blank at slot 20
+                def chunk1 = []
+                for (int i = 0; i < 19; i++) {
+                    chunk1.add(allStates[i])
+                }
+                chunk1.add(zeroWidthSpace)
+                stateChunks.add(chunk1)
+                
+                // MSV 2 and beyond: Blank at slot 1 + Next 18 States + Blank at slot 20
+                int idx = 19
+                while (idx < allStates.size()) {
+                    def chunk = []
+                    chunk.add(zeroWidthSpace) // Position 1 is Blank
+                    
+                    int added = 0
+                    while (added < 18 && idx < allStates.size()) {
+                        chunk.add(allStates[idx])
+                        idx++
+                        added++
+                    }
+                    
+                    // Pad the remainder out to exactly 20 so the final slot is always Blank
+                    while (chunk.size() < 20) {
+                        chunk.add(zeroWidthSpace)
+                    }
+                    stateChunks.add(chunk)
+                }
+            }
+            def totalChunks = stateChunks.size()
+
+            println "DEBUG: Initializing BACnet logic with ${totalChunks} symbol(s)..."
+
+            if (totalChunks <= 1) {
+                if (symbolBase.exists()) logic.append { symbol(symbolBase.absolutePath) }
+            } else {
+                if (symbol1_20.exists()) logic.append { symbol(symbol1_20.absolutePath) }
+                (totalChunks - 1).times {
+                    println "DEBUG: Appending BACnet expansion symbol #${it + 1}"
+                    if (symbolOver20.exists()) logic.append { symbol(symbolOver20.absolutePath) }
+                }
+            }
+
+            // ==========================================
+            // STEP 2: Main Logic Execution
+            // ==========================================
+            def searchText = "MSV:888888888"
+            def replaceText = txtNetworkPath.getText().trim()
+            def nameSearch = "Object_Name"
+            def nameReplace = txtDisplayName.getText().trim()
+            def searchMode = "14" 
+
+            def X = 1  // [Inactive Text]
+            def var1   // [Inactive Text]
+
+            def descriptiveRef = txtReferenceName.getText().trim()
+            def refSearch = searchText.toLowerCase().replace(' ', '_')
+
+            println "DEBUG: --- Starting Global BACnet Scan (Stable V3.3.0) ---"
+
+            int currentMicroblockIndex = 0
+            int msvChunkIndex = 0
+            int ifgtpCounter = 0 
+            int ifltpCounter = 0
+            int subpCounter = 0 
+            int statbCounter = 0 
+
+            logic.microblocks {
+                currentMicroblockIndex++
+                // If the index exceeds what was already on the page, we know it's a NEW block
+                boolean isNewBlock = currentMicroblockIndex > existingMicroblockCount
+                
+                if (searchMode == "14") {
+                    
+                    if (isNewBlock) {
+                        // 1. Address Property
+                        if (propNames.contains('address') && prop.'address'.contains(searchText)) {
+                            if (replaceText.contains("://")) {
+                                prop.'address' = replaceText
+                            } else {
+                                prop.'address' = prop.'address'.replaceAll(searchText, replaceText)
+                            }
+                        }
+
+                        // 2. Display Name & Description
+                        if (propNames.contains('display name') && prop.'display name'.contains(nameSearch)) {
+                            prop.'display name' = prop.'display name'.replaceAll(nameSearch, nameReplace)
+                            if (propNames.contains('description')) { prop.'description' = prop.'description'.replaceAll(nameSearch, nameReplace) }
+
+                            // 3. MSV State and Reference Name Chunking
+                            if (getType() == "bmsvs") {
+                                if (msvChunkIndex < totalChunks) {
+                                    prop.'state text' = stateChunks[msvChunkIndex].join('\n')
+                                    def suffix = "_msv_${msvChunkIndex + 1}"
+                                    prop.'reference name' = descriptiveRef + suffix
+                                    msvChunkIndex++
+                                }
+                            } else {
+                                def currentRef = prop.'reference name' ?: ""
+                                def suffix = ""
+                                if (currentRef.endsWith("_ani")) suffix = "_ani"
+                                else if (currentRef.endsWith("_tnd")) suffix = "_tnd"
+                                else if (currentRef.endsWith("_gai")) suffix = "_gai"
+                                else if (currentRef.endsWith("_alm")) suffix = "_alm"
+                                prop.'reference name' = descriptiveRef + suffix
+                            }
+                        }
+
+                        // 4. Trip Point and Subtraction Constant Logic (ISOLATED TO NEW BLOCKS ONLY)
+                        if (getType() == "subp" && propNames.contains('constant')) {
+                            subpCounter++
+                            float newSubConstant = 18.0f * subpCounter
+                            prop.'constant' = newSubConstant
+                            if (propNames.contains('reference name')) prop.'reference name' = descriptiveRef + "_subp_" + subpCounter
+                            println "DEBUG: Updated subp #${subpCounter} Constant to ${newSubConstant}"
+                        }
+
+                        if (getType() == "ifgtp" && propNames.contains('trip point')) {
+                            ifgtpCounter++
+                            if (ifgtpCounter > 1) {
+                                float newThreshold = 19.0f + (18.0f * (ifgtpCounter - 2))
+                                prop.'trip point' = newThreshold
+                                println "DEBUG: Updated ifgtp #${ifgtpCounter} Trip Point to ${newThreshold}"
+                            }
+                            if (propNames.contains('reference name')) prop.'reference name' = descriptiveRef + "_ifgtp_" + ifgtpCounter
+                        }
+                        
+                        if (getType() == "ifltp" && propNames.contains('trip point')) {
+                            ifltpCounter++
+                            if (ifltpCounter > 1) {
+                                float newThreshold = 38.0f + (18.0f * (ifltpCounter - 2))
+                                prop.'trip point' = newThreshold
+                                println "DEBUG: Updated ifltp #${ifltpCounter} Trip Point to ${newThreshold}"
+                            }
+                            if (propNames.contains('reference name')) prop.'reference name' = descriptiveRef + "_ifltp_" + ifltpCounter
+                        }
+
+                        // 5. Binary Status (statb) Renaming
+                        if (getType() == "statb" && propNames.contains('reference name')) {
+                            def curRef = prop.'reference name' ?: ""
+                            if (curRef.contains("object_identifier_bs")) {
+                                statbCounter++
+                                def suffix = "_bs_${statbCounter}"
+                                prop.'reference name' = descriptiveRef + suffix
+                                println "DEBUG: Updated statb #${statbCounter} Reference Name to ${prop.'reference name'}"
+                            }
+                        }
+                    }
+                }
+                
+                // --- PROTECTED INDIVIDUAL MODES ---
+                else if (!isNewBlock) {
+                    if (searchMode == "1" && propNames.contains('display name') && prop.'display name'.contains(searchText)) { prop.'display name' = prop.'display name'.replaceAll(searchText, replaceText) }
+                    else if (searchMode == "3" && propNames.contains('display name') && prop.'display name'.contains(searchText)) {
+                        prop.'display name' = prop.'display name'.replaceAll(searchText, replaceText)
+                        prop.'reference name' = prop.'reference name'.replaceAll(refSearch, replaceText.toLowerCase())
+                    }
+                    else if (searchMode == "4" && propNames.contains('address') && prop.'address'.contains(searchText)) {
+                        if (replaceText.contains("://")) {
+                            prop.'address' = replaceText
+                        } else {
+                            prop.'address' = prop.'address'.replaceAll(searchText, replaceText)
+                        }
+                        prop.'reference name' = prop.'reference name'.replaceAll(refSearch, replaceText.toLowerCase())
+                    }
+                    else if (searchMode == "5" && propNames.contains('inactive text') && prop.'inactive text'.contains(searchText)) {
+                        prop.'inactive text' = prop.'inactive text'.replaceAll(searchText, replaceText)
+                    }
+                    else if (searchMode == "6" && propNames.contains('active text') && prop.'active text'.contains(searchText)) {
+                        prop.'active text' = prop.'active text'.replaceAll(searchText, replaceText)
+                    }
+                    else if (searchMode == "8" && propNames.contains('alarm text') && prop.'alarm text'.contains(searchText)) {
+                        prop.'alarm text' = prop.'alarm text'.replaceAll(searchText, replaceText)
+                        prop.'return text' = prop.'return text'.replaceAll(searchText, replaceText)
+                    }
+                    else if (searchMode == "2" && propNames.contains('reference name') && prop.'reference name'.contains(searchText)) {
+                        prop.'reference name' = prop.'reference name'.replaceAll(searchText, replaceText)
+                    }
+                    else if (searchMode == "9" && propNames.contains('description') && prop.'description'.contains(searchText)) {
+                        prop.'description' = prop.'description'.replaceAll(searchText, replaceText)
+                    }
+                    else if (searchMode == "12" && propNames.contains('object instance')) {
+                        prop.'object instance' = X + prop.'object instance'
+                    }
+                    else if (searchMode == "11" && propNames.contains('property page text') && prop.'property page text'.contains(searchText)) {
+                        prop.'property page text' = prop.'property page text'.replaceAll(searchText, replaceText)
+                    }
+                }
+            }
+
+            // --- PART 3: Label & Figure Cleanup ---
+            int currentLabelIndex = 0
+            if (searchMode == "7" || searchMode == "14") {
+                for (def label : logic.labels()) {
+                    currentLabelIndex++
+                    boolean isNewLabel = currentLabelIndex > existingLabelCount
+                    
+                    if ((searchMode == "14" && isNewLabel) || searchMode == "7") {
+                        if (label.name.contains(searchText)) { label.rename(label.name.replaceAll(searchText, replaceText)) }
+                        if (label.name.contains(nameSearch)) { label.rename(label.name.replaceAll(nameSearch, nameReplace)) }
+                    }
+                }
+            }
+
+            int currentFigureIndex = 0
+            int figureMatchCount = 0
+            if (searchMode == "10" || searchMode == "14") {
+                logic.figures {
+                    if (getType().equals('text-figure')) {
+                        currentFigureIndex++
+                        boolean isNewFigure = currentFigureIndex > existingFigureCount
+                        
+                        if ((searchMode == "14" && isNewFigure) || searchMode == "10") {
+                            // Prevent doubled protocols if replacing full hardcoded bacnet strings
+                            if (text.contains("bacnet://999999999/" + searchText) && replaceText.contains("://")) {
+                                text = text.replaceAll("bacnet://999999999/" + searchText, replaceText)
+                            } else if (text.contains(searchText)) { 
+                                text = text.replaceAll(searchText, replaceText) 
+                            }
+                            
+                            if (text.contains(nameSearch)) { text = text.replaceAll(nameSearch, nameReplace) }
+                            
+                            // Tag base symbol as MSV1
+                            if (text.contains("MSV 1-19")) {
+                                text = text.replaceAll("MSV 1-19", "MSV1 1-19")
+                            } else if (text.contains("MSV 1-20")) {
+                                text = text.replaceAll("MSV 1-20", "MSV1 1-20")
+                            }
+                            
+                            // Tag expansion symbols sequentially
+                            if (text.contains("MSV XXX-XXX")) {
+                                figureMatchCount++
+                                int msvNum = figureMatchCount + 1
+                                int startRange = 20 + (18 * (figureMatchCount - 1))
+                                int endRange = startRange + 17
+                                text = "MSV${msvNum} ${startRange}-${endRange}"
+                                println "DEBUG: Updated Text Figure to MSV${msvNum} ${startRange}-${endRange}"
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- PART 4: Mode 13 Preserved ---
+            if (searchMode == "13") {
+                Integer stopY = null
+                def aLabels = []
+                logic.labels() { if (name == "NA") { stopY = getY() } }
+                if (stopY == null) { stopY = Integer.MAX_VALUE }
+                logic.labels() {
+                    if (name ==~ /A\d{3}/ && getY() < stopY) {
+                        aLabels << [label: delegate, x: getX(), y: getY()]
+                    }
+                }
+                aLabels.sort { a, b -> a.y == b.y ? a.x <=> b.x : a.y <=> b.y }
+                int counter = 1
+                aLabels.each { entry ->
+                    if (counter > 999) return
+                    entry.label.rename(String.format("A%03d", counter))
+                    counter++
+                }
+            }
+
+            statusLabel.setText("Success! Appended ${totalChunks} symbols and processed ${allStates.size()} states.")
+            println "DEBUG: Done."
+            
+        } catch (Exception ex) {
+            statusLabel.setText("Error: " + (ex?.message ?: ex?.toString()))
+            println "ERROR: " + ex.toString()
+        }
+    }
+})
